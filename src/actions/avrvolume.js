@@ -1,10 +1,13 @@
-import { action, KeyDownEvent, SingletonAction, WillAppearEvent } from '@elgato/streamdeck';
+import streamDeck, { action, KeyDownEvent, SingletonAction, WillAppearEvent } from '@elgato/streamdeck';
 
 /**
  * An example action class that displays a count that increments by one each time the button is pressed.
  */
 action({ UUID: 'com.matthew-thiel.denon-receiver-network-control.avrvolume' })(AVRVolume);
 class AVRVolume extends SingletonAction {
+	logger;
+	plugin;
+
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
 	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}. In this example,
@@ -29,6 +32,15 @@ class AVRVolume extends SingletonAction {
 		// Update the current count in the action's settings, and change the title.
 		await ev.action.setSettings(settings);
 		await ev.action.setTitle(`${settings.count}`);
+	}
+
+	/**
+	 * @param {import('../plugin').AvrPlugin} plugin
+	 */
+	constructor(plugin) {
+		super();
+
+		this.plugin = plugin;
 	}
 }
 
