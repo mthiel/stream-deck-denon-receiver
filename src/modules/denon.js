@@ -1,19 +1,31 @@
 import net from 'net';
 import { TelnetSocket } from 'telnet-stream';
+import { Logger } from '@elgato/streamdeck';
 
 class Denon {
     /** @type {TelnetSocket} */
     #telnet;
 
+    /**
+     * Initialize the Denon receiver module
+     */
+    constructor() {
+        // this.#logger = logger;
+    }
+    
+    /**
+     * Connect to the receiver
+     * @param {string} [host='studio-receiver.faewoods.org'] - The host to connect to (default is for testing)
+     * @param {number} [port=23] - The port to connect to
+     */
     connect(host = 'studio-receiver.faewoods.org', port = 23) {
         // Handle the case where the connection is already open
         if (this.#telnet && !this.#telnet.destroyed) {
-            console.log('Connection already exists');
+            console.warn('Connection already exists.');
             return;
         }
 
-        let socket = net.createConnection(port, host);
-        let telnet = new TelnetSocket(socket);
+        let telnet = new TelnetSocket(net.createConnection(port, host));
 
         // Connection lifecycle events
         telnet.on('connect', this.#onConnect);
@@ -35,16 +47,17 @@ class Denon {
      * Disconnect from the receiver
      */
     disconnect() {
-        if (!this.#telnet) {
-            return;
-        }
+        if (this.#telnet && !this.#telnet.destroyed) {
+            this.#telnet.destroy();
 
-        let telnet = this.#telnet;
-
-        if (!telnet.destroyed) {
-            telnet.destroy().on('close', () => {
-                this.#telnet = null;
-            });
+            // Set a timeout to clean up the instance
+            /** @type {TelnetSocket} */
+            let staleTelnet = this.#telnet;
+            setTimeout(() => {
+                if (!staleTelnet.destroyed) {
+                    staleTelnet.unref();
+                }
+            }, 1000);
         }
     }
 
@@ -52,7 +65,7 @@ class Denon {
      * Handle connection events
      */
     #onConnect() {
-        console.log('Connected to Denon receiver');
+        console.info('Connected to Denon receiver.');
     }
 
     /**
@@ -63,7 +76,11 @@ class Denon {
         this.#telnet = null;
     
         // TODO: Determine if we should reconnect
-        console.log('Connection closed', hadError ? 'with error' : 'cleanly');
+        if (!hadError) {
+            console.log('Connection to receiver closed cleanly.');
+        } else {
+            console.log('Connection to receiver closed with error.');
+        }
     }
 
     /**
