@@ -4,18 +4,24 @@
 	"Author": "Matthew Thiel",
 	"Actions": [
 		{
-			"Name": "Counter",
-			"UUID": "com.matthew-thiel.denon-receiver-network-control.increment",
-			"Icon": "imgs/actions/counter/icon",
-			"Tooltip": "Displays a count, which increments by one on press.",
-			"PropertyInspectorPath": "ui/increment-counter.html",
-			"Controllers": [
-				"Keypad"
-			],
+			"Name": "AVR Volume Control",
+			"UUID": "com.matthew-thiel.denon-receiver-network-control.avrvolume",
+			"Icon": "imgs/actions/avrvolume/icon",
+			"Tooltip": "Displays the current volume and allows for adjustment.",
+			"PropertyInspectorPath": "ui/avrvolume.html",
+			"Controllers": [ "Keypad", "Encoder" ],
+			"Encoder": {
+				"background": "touchscreen-background",
+				"layout": "$B1",
+				"TriggerDescription": {
+					"Push": "Mute/Unmute",
+					"Rotate": "Adjust Volume",
+					"Touch": "Mute/Unmute"
+				}
+			},
 			"States": [
 				{
-					"Image": "imgs/actions/counter/key",
-					"TitleAlignment": "middle"
+					"Image": "imgs/actions/avrvolume/key"
 				}
 			]
 		}

@@ -1,8 +1,7 @@
 import net from 'net';
 import { TelnetSocket } from 'telnet-stream';
-import { Logger } from '@elgato/streamdeck';
 
-class Denon {
+class DenonAVR {
     /** @type {TelnetSocket} */
     #telnet;
 
@@ -102,4 +101,4 @@ class Denon {
     }
 };
 
-export { Denon };
+export { DenonAVR };

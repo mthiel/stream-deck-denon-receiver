@@ -3,8 +3,8 @@ import { action, KeyDownEvent, SingletonAction, WillAppearEvent } from '@elgato/
 /**
  * An example action class that displays a count that increments by one each time the button is pressed.
  */
-action({ UUID: 'com.matthew-thiel.denon-receiver-network-control.increment' })(IncrementCounter);
-class IncrementCounter extends SingletonAction {
+action({ UUID: 'com.matthew-thiel.denon-receiver-network-control.avrvolume' })(AVRVolume);
+class AVRVolume extends SingletonAction {
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
 	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}. In this example,
@@ -33,4 +33,4 @@ class IncrementCounter extends SingletonAction {
 }
 
 // Export the class
-export { IncrementCounter };
+export { AVRVolume };
