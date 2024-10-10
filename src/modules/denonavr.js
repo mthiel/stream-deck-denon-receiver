@@ -1,27 +1,36 @@
 import net from "net";
 import { TelnetSocket } from "telnet-stream";
 
+export let logger = streamDeck.logger;
+
+/** @type {DenonAVR[]} */
+let pool = [];
+
 class DenonAVR {
 	/** @type {TelnetSocket} */
 	#telnet;
 
-	/**
-	 * Initialize the Denon receiver module
-	 */
-	constructor() {
-		// this.#logger = logger;
-	}
+	/** @type {string} */
+	id;
+
+	/** @type {number} */
+	volume;
+
+	/** @type {boolean} */
+	muted;
 
 	/**
-	 * Connect to the receiver
+	 * Connect to a receiver
 	 * @param {string} [host='studio-receiver.faewoods.org'] - The host to connect to (default is for testing)
 	 * @param {number} [port=23] - The port to connect to
 	 */
-	connect(host = "studio-receiver.faewoods.org", port = 23) {
-		// Handle the case where the connection is already open
-		if (this.#telnet && !this.#telnet.destroyed) {
-			console.warn("Connection already exists.");
-			return;
+	constructor(host = "studio-receiver.faewoods.org", port = 23) {
+		this.id = `${host}:${port}`;
+
+		// Check if the instance already exists and reuse it
+		let instance = pool.find((instance) => instance.id == this.id);
+		if (instance) {
+			return instance;
 		}
 
 		let telnet = new TelnetSocket(net.createConnection(port, host));
@@ -40,31 +49,41 @@ class DenonAVR {
 
 		// Assign the telnet socket to the instance
 		this.#telnet = telnet;
+
+		// Add the instance to the pool
+		pool.push(this);
 	}
 
 	/**
-	 * Disconnect from the receiver
+	 * Disconnect from the receiver and remove it from the pool
 	 */
 	disconnect() {
-		if (this.#telnet && !this.#telnet.destroyed) {
-			this.#telnet.destroy();
+		let telnet = this.#telnet;
 
-			// Set a timeout to clean up the instance
+		// Dispose of the telnet socket
+		if (telnet && !telnet.destroyed) {
+			telnet.destroy();
+
+			// Set a timeout to clean up the socket
 			/** @type {TelnetSocket} */
-			let staleTelnet = this.#telnet;
 			setTimeout(() => {
-				if (!staleTelnet.destroyed) {
-					staleTelnet.unref();
+				if (!telnet.destroyed) {
+					telnet.unref();
 				}
 			}, 1000);
 		}
+
+		// Remove the instance from the pool
+		pool = pool.filter((instance) => instance !== this);
 	}
 
 	/**
 	 * Handle connection events
 	 */
 	#onConnect() {
-		console.info("Connected to Denon receiver.");
+		logger.info("Connected to Denon receiver.");
+
+		this.#requestStatus();
 	}
 
 	/**
@@ -72,13 +91,11 @@ class DenonAVR {
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
-		this.#telnet = null;
-
 		// TODO: Determine if we should reconnect
 		if (!hadError) {
-			console.log("Connection to receiver closed cleanly.");
+			logger.info("Connection to receiver closed cleanly.");
 		} else {
-			console.log("Connection to receiver closed with error.");
+			logger.error("Connection to receiver closed with error.");
 		}
 	}
 
@@ -87,8 +104,22 @@ class DenonAVR {
 	 * @param {Buffer | string} data
 	 */
 	#onData(data) {
-		// TODO: Build a parser and dispatch events for the data
-		console.log("Received data:", data.toString());
+		logger.debug("Received data:", data.toString());
+
+		let lines = data.toString().split('\r');
+		for (let line of lines) {
+			let command = line.substring(0, 2);
+			let parameter = line.substring(2);
+
+			switch (command) {
+				case "MV":
+					this.volume = parseInt(parameter.substring(0, 2));
+					break;
+				case "MU":
+					this.muted = parameter == "ON";
+					break;
+			}
+		}
 	}
 
 	/**
@@ -97,7 +128,14 @@ class DenonAVR {
 	 */
 	#onError(error) {
 		// TODO: Determine if we should reconnect
-		console.error("Error:", error);
+		logger.error("Error:", error);
+	}
+
+	#requestStatus() {
+		let telnet = this.#telnet;
+
+		telnet.write("MV?\r");
+		telnet.write("MU?\r");
 	}
 }
 
