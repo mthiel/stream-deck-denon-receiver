@@ -1,4 +1,4 @@
-import streamDeck, { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import streamDeck, { action, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
 import { DenonAVR } from "../modules/denonavr";
 
 export let logger = streamDeck.logger;
@@ -9,22 +9,27 @@ action({ UUID: "com.matthew-thiel.denon-receiver-network-control.avrvolume" })(A
  * The AVRVolume action class.
  */
 export class VolumeAction extends SingletonAction {
+
+	/** @type {DenonAVR} */
+	#receiver;
+
+	constructor() {
+		super();
+
+		// Create a new DenonAVR instance.
+		// TODO: Add host and port settings and use them here.
+		this.#receiver = new DenonAVR();
+	}
+
+	#updateStatus() {
+		this.setTitle(`Vol: ${this.#receiver.volume}`);
+	}
+
+	/**
+	 * Called when the action is about to appear on the Stream Deck.
+	 * @param {WillAppearEvent} ev - The event object.
+	 */
 	onWillAppear(ev) {
-		return ev.action.setTitle(`${ev.payload.settings.count ?? 0}`);
-	}
-
-	async onKeyDown(ev) {
-		// Update the count from the settings.
-		const { settings } = ev.payload;
-		settings.incrementBy ??= 1;
-		settings.count = (settings.count ?? 0) + settings.incrementBy;
-
-		// Update the current count in the action's settings, and change the title.
-		await ev.action.setSettings(settings);
-		await ev.action.setTitle(`${settings.count}`);
-	}
-
-	onWillDisappear(ev) {
-		return ev.action.setTitle("");
+		this.#updateStatus();
 	}
 }

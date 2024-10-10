@@ -6,6 +6,12 @@ export let logger = streamDeck.logger;
 /** @type {DenonAVR[]} */
 let pool = [];
 
+/**
+ * Represents a connection to a Denon AVR receiver
+ * @property {string} id - The unique identifier for the receiver
+ * @property {number} volume - The current volume of the receiver
+ * @property {boolean} muted - Whether the receiver is muted
+ */
 class DenonAVR {
 	/** @type {TelnetSocket} */
 	#telnet;
