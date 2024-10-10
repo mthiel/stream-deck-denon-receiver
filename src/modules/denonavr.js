@@ -10,8 +10,12 @@ class DenonAVR {
 	/** @type {TelnetSocket} */
 	#telnet;
 
+	/** @type {number} */
+	#reconnectCount = 0;
+
 	/** @type {string} */
-	id;
+	#id;
+	get id() { return this.#id; }
 
 	/** @type {number} */
 	volume;
@@ -20,19 +24,31 @@ class DenonAVR {
 	muted;
 
 	/**
-	 * Connect to a receiver
+	 * Create a new DenonAVR instance
 	 * @param {string} [host='studio-receiver.faewoods.org'] - The host to connect to (default is for testing)
 	 * @param {number} [port=23] - The port to connect to
 	 */
 	constructor(host = "studio-receiver.faewoods.org", port = 23) {
-		this.id = `${host}:${port}`;
+		this.#id = `${host}:${port}`;
 
 		// Check if the instance already exists and reuse it
-		let instance = pool.find((instance) => instance.id == this.id);
+		let instance = pool.find((instance) => instance.id == this.#id);
 		if (instance) {
 			return instance;
 		}
 
+		this.connect(host, port);
+
+		// Add the instance to the pool
+		pool.push(this);
+	}
+
+	/**
+	 * Connect to a receiver
+	 * @param {string} host - The host to connect to
+	 * @param {number} port - The port to connect to
+	 */
+	connect(host, port) {
 		let telnet = new TelnetSocket(net.createConnection(port, host));
 
 		// Connection lifecycle events
@@ -49,9 +65,6 @@ class DenonAVR {
 
 		// Assign the telnet socket to the instance
 		this.#telnet = telnet;
-
-		// Add the instance to the pool
-		pool.push(this);
 	}
 
 	/**
@@ -61,6 +74,7 @@ class DenonAVR {
 		let telnet = this.#telnet;
 
 		// Dispose of the telnet socket
+		this.#telnet = null;
 		if (telnet && !telnet.destroyed) {
 			telnet.destroy();
 
@@ -83,6 +97,8 @@ class DenonAVR {
 	#onConnect() {
 		logger.info("Connected to Denon receiver.");
 
+		this.#reconnectCount = 0;
+
 		this.#requestStatus();
 	}
 
@@ -91,11 +107,14 @@ class DenonAVR {
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
-		// TODO: Determine if we should reconnect
-		if (!hadError) {
-			logger.info("Connection to receiver closed cleanly.");
-		} else {
-			logger.error("Connection to receiver closed with error.");
+		(hadError ? logger.error : logger.warn)("Disconnected from Denon receiver.");
+
+		if (this.#telnet && this.#reconnectCount < 10) {
+			this.#reconnectCount++;
+
+			setTimeout(() => {
+				this.connect(this.#telnet.remoteAddress, this.#telnet.remotePort);
+			}, 1000);
 		}
 	}
 
@@ -134,8 +153,8 @@ class DenonAVR {
 	#requestStatus() {
 		let telnet = this.#telnet;
 
-		telnet.write("MV?\r");
-		telnet.write("MU?\r");
+		telnet.write("MV?\r"); // Request the volume
+		telnet.write("MU?\r"); // Request the mute status
 	}
 }
 
