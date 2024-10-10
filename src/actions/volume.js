@@ -1,4 +1,5 @@
 import streamDeck, { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import { DenonAVR } from "../modules/denonavr";
 
 export let logger = streamDeck.logger;
 
