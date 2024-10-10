@@ -1,29 +1,14 @@
-import streamDeck, { LogLevel } from '@elgato/streamdeck';
-import { DenonAVR } from './modules/denonavr';
-import { AVRVolume } from './actions/avrvolume';
+import streamDeck, { LogLevel } from "@elgato/streamdeck";
+const logger = streamDeck.logger.createScope("DenonAVR");
 
-class AvrPlugin {
-    logger;
+import { VolumeAction } from "./actions/avrvolume";
+// AVRVolume.logger = logger;
 
-    #connections = [];
-
-    constructor() {
-        let logger = streamDeck.logger.createScope('DenonAVR');
-
-        // We can enable "trace" logging so that all messages between the Stream Deck, and the plugin are recorded. When storing sensitive information
-        logger.setLevel(LogLevel.TRACE);
-
-        this.logger = logger;
-
-        // TODO: Retrieve global settings from Stream Deck
-    }
-}
-
-// Instantiate the plugin.
-const plugin = new AvrPlugin();
+// We can enable "trace" logging so that all messages between the Stream Deck, and the plugin are recorded.
+logger.setLevel(LogLevel.TRACE);
 
 // Register the volume control action.
-streamDeck.actions.registerAction(new AVRVolume(plugin));
+streamDeck.actions.registerAction(new VolumeAction());
 
 // Finally, connect to the Stream Deck.
 streamDeck.connect();

@@ -1,28 +1,17 @@
-import streamDeck, { action, KeyDownEvent, SingletonAction, WillAppearEvent } from '@elgato/streamdeck';
+import streamDeck, { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+
+export let logger = streamDeck.logger;
+
+action({ UUID: "com.matthew-thiel.denon-receiver-network-control.avrvolume" })(AVRVolume);
 
 /**
- * An example action class that displays a count that increments by one each time the button is pressed.
+ * The AVRVolume action class.
  */
-action({ UUID: 'com.matthew-thiel.denon-receiver-network-control.avrvolume' })(AVRVolume);
-class AVRVolume extends SingletonAction {
-	logger;
-	plugin;
-
-	/**
-	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
-	 * starting up, or the user navigating between pages / folders etc.. There is also an inverse of this event in the form of {@link streamDeck.client.onWillDisappear}. In this example,
-	 * we're setting the title to the "count" that is incremented in {@link IncrementCounter.onKeyDown}.
-	 */
+export class VolumeAction extends SingletonAction {
 	onWillAppear(ev) {
 		return ev.action.setTitle(`${ev.payload.settings.count ?? 0}`);
 	}
 
-	/**
-	 * Listens for the {@link SingletonAction.onKeyDown} event which is emitted by Stream Deck when an action is pressed. Stream Deck provides various events for tracking interaction
-	 * with devices including key down/up, dial rotations, and device connectivity, etc. When triggered, {@link ev} object contains information about the event including any payloads
-	 * and action information where applicable. In this example, our action will display a counter that increments by one each press. We track the current count on the action's persisted
-	 * settings using `setSettings` and `getSettings`.
-	 */
 	async onKeyDown(ev) {
 		// Update the count from the settings.
 		const { settings } = ev.payload;
@@ -34,15 +23,7 @@ class AVRVolume extends SingletonAction {
 		await ev.action.setTitle(`${settings.count}`);
 	}
 
-	/**
-	 * @param {import('../plugin').AvrPlugin} plugin
-	 */
-	constructor(plugin) {
-		super();
-
-		this.plugin = plugin;
+	onWillDisappear(ev) {
+		return ev.action.setTitle("");
 	}
 }
-
-// Export the class
-export { AVRVolume };
