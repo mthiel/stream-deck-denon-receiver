@@ -13,7 +13,6 @@ let logger;
 /**
  * The Volume action class.
  * @extends {SingletonAction}
- * @property {DenonAVR} #receiver - The bound DenonAVR instance.
  */
 @action({ UUID: "com.mthiel.denon-controller.volume" })
 class VolumeAction extends SingletonAction {
@@ -29,10 +28,15 @@ class VolumeAction extends SingletonAction {
 		if (!logger && newLogger) {
 			logger = newLogger.createScope("Volume Action");
 		}
+	}
 
-		// Create a new DenonAVR instance.
-		// TODO: Add host and port settings and use them here.
-		// this.#receiver = new DenonAVR("studio-receiver.faewoods.org", 23, logger);
+	onDidReceiveSettings(ev) {
+		logger.debug("onDidReceiveSettings: ev = ", JSON.stringify(ev, null, 2));
+
+		if (ev.settings && ev.settings.host && ev.settings.port) {
+			// Create a new DenonAVR instance.
+			// this.#receiver = new DenonAVR(ev.settings.host, ev.settings.port, logger);
+		}
 	}
 
 	#updateStatus(action) {
