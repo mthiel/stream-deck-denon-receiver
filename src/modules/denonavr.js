@@ -1,9 +1,12 @@
 import net from "net";
 import { TelnetSocket } from "telnet-stream";
 
-export let logger = streamDeck.logger;
+let logger;
 
-/** @type {DenonAVR[]} */
+/**
+ * Pool of active DenonAVR instances
+ * @type {DenonAVR[]}
+ */
 let pool = [];
 
 /**
@@ -13,28 +16,39 @@ let pool = [];
  * @property {boolean} muted - Whether the receiver is muted
  */
 class DenonAVR {
-	/** @type {TelnetSocket} */
-	#telnet;
-
-	/** @type {number} */
-	#reconnectCount = 0;
-
-	/** @type {string} */
-	#id;
-	get id() { return this.#id; }
-
-	/** @type {number} */
 	volume;
-
-	/** @type {boolean} */
 	muted;
 
 	/**
-	 * Create a new DenonAVR instance
-	 * @param {string} [host='studio-receiver.faewoods.org'] - The host to connect to (default is for testing)
-	 * @param {number} [port=23] - The port to connect to
+	 * The telnet socket connection to the receiver
+	 * @type {TelnetSocket}
 	 */
-	constructor(host = "studio-receiver.faewoods.org", port = 23) {
+	#telnet;
+
+	/**
+	 * The number of times the receiver has reconnected
+	 * @type {number}
+	 */
+	#reconnectCount = 0;
+
+	/**
+	 * The unique identifier for the receiver
+	 * @type {string}
+	 */
+	#id;
+	get id() { return this.#id; }
+
+	/**
+	 * Create a new DenonAVR instance
+	 * @param {string} host - The host to connect to
+	 * @param {number} port - The port to connect to
+	 * @param {Logger} [newLogger=null] - The logger to use for this instance.
+	 */
+	constructor(host, port, newLogger = null) {
+		if (!logger && newLogger) {
+			logger = newLogger.createScope("DenonAVR");
+		}
+
 		this.#id = `${host}:${port}`;
 
 		// Check if the instance already exists and reuse it

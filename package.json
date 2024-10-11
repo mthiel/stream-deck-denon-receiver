@@ -1,11 +1,12 @@
 {
     "scripts": {
         "build": "rollup -c",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.matthew-thiel.denon-receiver-network-control\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.mthiel.denon-controller\""
     },
     "type": "module",
     "devDependencies": {
         "@elgato/cli": "^1.0.0",
+        "@rollup/plugin-commonjs": "^28.0.0",
         "@rollup/plugin-node-resolve": "^15.2.2",
         "@rollup/plugin-terser": "^0.4.4",
         "@types/node": "~20.15.0",

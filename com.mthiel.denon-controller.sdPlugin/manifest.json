@@ -4,11 +4,11 @@
 	"Author": "Matthew Thiel",
 	"Actions": [
 		{
-			"Name": "AVR Volume Control",
-			"UUID": "com.matthew-thiel.denon-receiver-network-control.avrvolume",
-			"Icon": "imgs/actions/avrvolume/icon",
+			"Name": "Volume Control",
+			"UUID": "com.mthiel.denon-controller.volume",
+			"Icon": "imgs/actions/volume/icon",
 			"Tooltip": "Displays the current volume and allows for adjustment.",
-			"PropertyInspectorPath": "ui/avrvolume.html",
+			"PropertyInspectorPath": "ui/volume.html",
 			"Controllers": [ "Keypad", "Encoder" ],
 			"Encoder": {
 				"background": "touchscreen-background",
@@ -21,12 +21,12 @@
 			},
 			"States": [
 				{
-					"Image": "imgs/actions/avrvolume/key"
+					"Image": "imgs/actions/volume/key"
 				}
 			]
 		}
 	],
-	"Category": "Denon Receiver Network Control",
+	"Category": "Receiver Control",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
 	"Description": "Uses the network interface on many Denon/Marantz receivers to control basic functions.",
@@ -49,5 +49,5 @@
 		"Version": "20",
 		"Debug": "enabled"
 	},
-	"UUID": "com.matthew-thiel.denon-receiver-network-control"
+	"UUID": "com.mthiel.denon-controller"
 }

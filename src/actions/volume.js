@@ -1,28 +1,38 @@
-import streamDeck, { action, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import streamDeck, { action, SingletonAction } from "@elgato/streamdeck";
 import { DenonAVR } from "../modules/denonavr";
 
-export let logger = streamDeck.logger;
-
-action({ UUID: "com.matthew-thiel.denon-receiver-network-control.avrvolume" })(AVRVolume);
+let logger;
 
 /**
- * The AVRVolume action class.
+ * The Volume action class.
+ * @extends {SingletonAction}
+ * @property {DenonAVR} #receiver - The bound DenonAVR instance.
  */
-export class VolumeAction extends SingletonAction {
-
-	/** @type {DenonAVR} */
+@action({ UUID: "com.mthiel.denon-controller.volume" })
+class VolumeAction extends SingletonAction {
 	#receiver;
 
-	constructor() {
+	/**
+	 * Create a new VolumeAction instance.
+	 * @param {Logger} [newLogger=null] - The logger to use for this action.
+	 */
+	constructor(newLogger = null) {
 		super();
+
+		if (!logger && newLogger) {
+			logger = newLogger.createScope("Volume Action");
+		}
 
 		// Create a new DenonAVR instance.
 		// TODO: Add host and port settings and use them here.
-		this.#receiver = new DenonAVR();
+		this.#receiver = new DenonAVR("studio-receiver.faewoods.org", 23, logger);
 	}
 
 	#updateStatus() {
-		this.setTitle(`Vol: ${this.#receiver.volume}`);
+		let receiver = this.#receiver;
+		if (receiver) {
+			this.setTitle(`Vol: ${receiver.volume}`);
+		}
 	}
 
 	/**
@@ -33,3 +43,5 @@ export class VolumeAction extends SingletonAction {
 		this.#updateStatus();
 	}
 }
+
+export { VolumeAction };

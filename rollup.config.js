@@ -1,10 +1,11 @@
 import nodeResolve from "@rollup/plugin-node-resolve";
+import commonjs from "@rollup/plugin-commonjs";
 import terser from "@rollup/plugin-terser";
 import path from "node:path";
 import url from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "com.matthew-thiel.denon-receiver-network-control.sdPlugin";
+const sdPlugin = "com.mthiel.denon-controller.sdPlugin";
 
 /**
  * @type {import('rollup').RollupOptions}
@@ -30,7 +31,13 @@ const config = {
 			exportConditions: ["node"],
 			preferBuiltins: true
 		}),
-		!isWatching && terser(),
+		commonjs({
+			include: /node_modules/
+		}),
+		!isWatching && terser({
+			ecma: 2016,
+			module: true
+		}),
 		{
 			name: "emit-module-package-file",
 			generateBundle() {
