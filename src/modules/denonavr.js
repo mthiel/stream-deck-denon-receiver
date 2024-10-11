@@ -72,16 +72,16 @@ class DenonAVR {
 		let telnet = new TelnetSocket(net.createConnection(port, host));
 
 		// Connection lifecycle events
-		telnet.on("connect", this.#onConnect);
-		telnet.on("close", this.#onClose);
-		telnet.on("error", this.#onError);
+		telnet.on("connect", () => this.#onConnect());
+		telnet.on("close", (hadError) => this.#onClose(hadError));
+		telnet.on("error", (error) => this.#onError(error));
 
 		// Ignore standard telnet negotiation
 		telnet.on("do", (option) => telnet.writeWont(option));
 		telnet.on("will", (option) => telnet.writeDont(option));
 
 		// Data events
-		telnet.on("data", this.#onData);
+		telnet.on("data", (data) => this.#onData(data));
 
 		// Assign the telnet socket to the instance
 		this.#telnet = telnet;
