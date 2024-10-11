@@ -1,6 +1,7 @@
 import nodeResolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import terser from "@rollup/plugin-terser";
+import babel from "@rollup/plugin-babel";
 import path from "node:path";
 import url from "node:url";
 
@@ -34,10 +35,16 @@ const config = {
 		commonjs({
 			include: /node_modules/
 		}),
-		!isWatching && terser({
-			ecma: 2016,
-			module: true
+		babel({
+			babelHelpers: 'bundled',
+			presets: [
+				['@babel/preset-env', { targets: "defaults" }]
+			],
+			plugins: [
+				['@babel/plugin-proposal-decorators', { legacy: true }]
+			]
 		}),
+		!isWatching && terser(),
 		{
 			name: "emit-module-package-file",
 			generateBundle() {
