@@ -1,5 +1,6 @@
 import net from "net";
 import { TelnetSocket } from "telnet-stream";
+import streamDeck from "@elgato/streamdeck";
 
 let logger;
 
@@ -12,10 +13,14 @@ let pool = [];
 /**
  * Represents a connection to a Denon AVR receiver
  * @property {string} id - The unique identifier for the receiver
+ * @property {boolean} power - Whether the receiver is powered on
+ * @property {number} maxVolume - The maximum volume of the receiver
  * @property {number} volume - The current volume of the receiver
  * @property {boolean} muted - Whether the receiver is muted
  */
 class DenonAVR {
+	power;
+	maxVolume = 85;
 	volume;
 	muted;
 
@@ -111,6 +116,23 @@ class DenonAVR {
 		pool = pool.filter((instance) => instance !== this);
 	}
 
+	changeVolume(delta) {
+		if (!this.power) return;
+
+		let newVolume = Math.round(this.volume + delta);
+		newVolume = Math.max(0, Math.min(this.maxVolume, newVolume));
+
+		let newVolumeStr = newVolume.toString().padStart(2, '0');
+
+		this.#telnet.write(`MV${newVolumeStr}\r`);
+	}
+
+	toggleMute() {
+		if (!this.power) return;
+
+		this.#telnet.write(`MU${this.muted ? "OFF" : "ON"}\r`);
+	}
+
 	/**
 	 * Handle connection events
 	 */
@@ -127,8 +149,15 @@ class DenonAVR {
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
-		(hadError ? logger.error : logger.warn)("Disconnected from Denon receiver.");
+		const msg = "Disconnected from Denon receiver.";
 
+		try {
+			(hadError ? logger.error : logger.warn)(msg);
+		} catch (error) {
+			// TODO: Understand why the module logger sometimes fails here
+		}
+
+		// TODO: Test this out
 		if (this.#telnet && this.#reconnectCount < 10) {
 			this.#reconnectCount++;
 
@@ -143,19 +172,38 @@ class DenonAVR {
 	 * @param {Buffer | string} data
 	 */
 	#onData(data) {
-		logger.debug("Received data:", data.toString());
-
 		let lines = data.toString().split('\r');
 		for (let line of lines) {
+			if (line.length === 0) continue;
+
 			let command = line.substring(0, 2);
 			let parameter = line.substring(2);
 
 			switch (command) {
-				case "MV":
-					this.volume = parseInt(parameter.substring(0, 2));
+				case "PW": // Power
+					this.power = parameter == "ON";
+					logger.debug(`Received power status: ${this.power}`);
 					break;
-				case "MU":
+				case "MV": // Volume or max volume
+					if (parameter.startsWith("MAX")) {
+						// The "MAX" extended command is not documented, but it is used by the receiver
+						// Guessing this is the current maximum volume supported by the receiver
+						// In testing, this value raises as the volume approaches the maximum
+						// Ex: "MAX 855" (Last digit is tenths and not significant)
+						let newMaxVolume = parseInt(parameter.substring(4, 6));
+						this.maxVolume = newMaxVolume;
+						logger.debug(`Received (probably) max volume: ${this.maxVolume}`);
+					} else {
+						this.volume = parseInt(parameter.substring(0, 2));
+						logger.debug(`Received current volume: ${this.volume}`);
+					}
+					break;
+				case "MU": // Mute
 					this.muted = parameter == "ON";
+					logger.debug(`Received mute status: ${this.muted}`);
+					break;
+				default:
+					logger.debug(`Unknown message from receiver: ${line}`);
 					break;
 			}
 		}
@@ -172,7 +220,9 @@ class DenonAVR {
 
 	#requestStatus() {
 		let telnet = this.#telnet;
+		if (!telnet) return;
 
+		telnet.write("PW?\r"); // Request the power status
 		telnet.write("MV?\r"); // Request the volume
 		telnet.write("MU?\r"); // Request the mute status
 	}

@@ -17,7 +17,9 @@
     <sdpi-item label="Port">
         <sdpi-textfield setting="port" required placeholder="23"></sdpi-textfield>
     </sdpi-item>
-    <sdpi-button onclick="connect(this)">Connect</sdpi-button>
+    <sdpi-item>
+        <sdpi-button onclick="connect(this)">Connect</sdpi-button>
+    </sdpi-item>
     <sdpi-item label="Status">
         <div id="status"></div>
     </sdpi-item>
@@ -25,14 +27,21 @@
     <script>
         const { streamDeckClient } = SDPIComponents;
 
+        var logger = streamDeckClient.logger.createScope('Volume ActionUI');
+
+        streamDeckClient.on('sendToPropertyInspector', (ev) => {
+            logger.debug('sendToPropertyInspector', JSON.stringify(ev, null, 2));
+
+            if (ev.payload && ev.payload.message === "status" && ev.payload.details ) {
+                document.getElementById('status').textContent = ev.payload.details;
+            }
+        });
+
         function connect(e) {
-            // streamDeckClient.send('sendToPlugin', { message: 'connect' })
-            //     .then((response) => {
-            //         document.getElementById('status').textContent = response.message;
-            //     })
-            //     .catch((error) => {
-            //         document.getElementById('status').textContent = error;
-            //     });
+            streamDeckClient.send('sendToPlugin', { message: 'connect' })
+                .then((response) => {
+                    logger.debug('connect message response', JSON.stringify(response, null, 2));
+                });
         }
     </script>
 </body>
