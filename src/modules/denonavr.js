@@ -1,6 +1,6 @@
 import net from "net";
 import { TelnetSocket } from "telnet-stream";
-import streamDeck from "@elgato/streamdeck";
+import { EventEmitter } from "events";
 
 let logger;
 
@@ -17,12 +17,14 @@ let pool = [];
  * @property {number} maxVolume - The maximum volume of the receiver
  * @property {number} volume - The current volume of the receiver
  * @property {boolean} muted - Whether the receiver is muted
+ * @property {EventEmitter} eventEmitter - The event emitter for this instance
  */
 class DenonAVR {
 	power;
 	maxVolume = 85;
 	volume;
 	muted;
+	eventEmitter = new EventEmitter();
 
 	/**
 	 * The telnet socket connection to the receiver
@@ -41,7 +43,9 @@ class DenonAVR {
 	 * @type {string}
 	 */
 	#id;
-	get id() { return this.#id; }
+	get id() {
+		return this.#id;
+	}
 
 	/**
 	 * Create a new DenonAVR instance
@@ -59,6 +63,7 @@ class DenonAVR {
 		// Check if the instance already exists and reuse it
 		let instance = pool.find((instance) => instance.id == this.#id);
 		if (instance) {
+			logger.debug(`Reusing existing DenonAVR instance: ${this.#id}`);
 			return instance;
 		}
 
@@ -73,7 +78,9 @@ class DenonAVR {
 	 * @param {string} host - The host to connect to
 	 * @param {number} port - The port to connect to
 	 */
-	connect(host, port) {
+	async connect(host, port) {
+		logger.debug(`Connecting to Denon receiver: ${host}:${port}`);
+
 		let telnet = new TelnetSocket(net.createConnection(port, host));
 
 		// Connection lifecycle events
@@ -95,7 +102,7 @@ class DenonAVR {
 	/**
 	 * Disconnect from the receiver and remove it from the pool
 	 */
-	disconnect() {
+	async disconnect() {
 		let telnet = this.#telnet;
 
 		// Dispose of the telnet socket
@@ -104,7 +111,6 @@ class DenonAVR {
 			telnet.destroy();
 
 			// Set a timeout to clean up the socket
-			/** @type {TelnetSocket} */
 			setTimeout(() => {
 				if (!telnet.destroyed) {
 					telnet.unref();
@@ -116,32 +122,41 @@ class DenonAVR {
 		pool = pool.filter((instance) => instance !== this);
 	}
 
-	changeVolume(delta) {
-		if (!this.power) return;
+	async changeVolume(delta) {
+		let telnet = this.#telnet;
+		if (!telnet || !this.power || this.volume === undefined) return;
 
-		let newVolume = Math.round(this.volume + delta);
-		newVolume = Math.max(0, Math.min(this.maxVolume, newVolume));
+		let newVolumeStr = Math.max(0, Math.min(this.maxVolume, Math.round(this.volume + delta)))
+			.toString()
+			.padStart(2, "0");
 
-		let newVolumeStr = newVolume.toString().padStart(2, '0');
+		let command = `MV${newVolumeStr}`;
 
-		this.#telnet.write(`MV${newVolumeStr}\r`);
+		logger.debug(`Sending volume command: ${command}`);
+		telnet.write(command + "\r");
 	}
 
-	toggleMute() {
-		if (!this.power) return;
+	async toggleMute() {
+		let telnet = this.#telnet;
+		if (!telnet || !this.power || this.muted === undefined) return;
 
-		this.#telnet.write(`MU${this.muted ? "OFF" : "ON"}\r`);
+		let command = `MU${this.muted ? "OFF" : "ON"}`;
+
+		logger.debug(`Sending mute command: ${command}`);
+		telnet.write(command + "\r");
 	}
 
 	/**
 	 * Handle connection events
 	 */
 	#onConnect() {
-		logger.info("Connected to Denon receiver.");
+		logger.info("Telnet connection established to Denon receiver.");
 
 		this.#reconnectCount = 0;
 
 		this.#requestStatus();
+
+		this.eventEmitter.emit("connected");
 	}
 
 	/**
@@ -149,19 +164,17 @@ class DenonAVR {
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
-		const msg = "Disconnected from Denon receiver.";
+		const msg = `Telnet connection to Denon receiver closed${hadError ? " due to error" : ""}.`;
 
-		try {
-			(hadError ? logger.error : logger.warn)(msg);
-		} catch (error) {
-			// TODO: Understand why the module logger sometimes fails here
-		}
+		this.eventEmitter.emit("closed", msg);
 
 		// TODO: Test this out
 		if (this.#telnet && this.#reconnectCount < 10) {
 			this.#reconnectCount++;
 
 			setTimeout(() => {
+				this.eventEmitter.emit("status", `Reconnecting to Denon receiver: ${this.#id}. Attempt ${this.#reconnectCount}`);
+
 				this.connect(this.#telnet.remoteAddress, this.#telnet.remotePort);
 			}, 1000);
 		}
@@ -172,7 +185,7 @@ class DenonAVR {
 	 * @param {Buffer | string} data
 	 */
 	#onData(data) {
-		let lines = data.toString().split('\r');
+		let lines = data.toString().split("\r");
 		for (let line of lines) {
 			if (line.length === 0) continue;
 
@@ -214,6 +227,8 @@ class DenonAVR {
 	 * @param {Error} error
 	 */
 	#onError(error) {
+		this.eventEmitter.emit("error", `${error.message} (${error.code})`);
+
 		// TODO: Determine if we should reconnect
 		logger.error("Error:", error);
 	}

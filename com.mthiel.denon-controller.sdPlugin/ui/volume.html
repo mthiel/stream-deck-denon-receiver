@@ -12,7 +12,7 @@
         Learn more about property inspector components at https://sdpi-components.dev/docs/components
     -->
     <sdpi-item label="Host">
-        <sdpi-textfield setting="host" required placeholder="studio-receiver.faewoods.org"></sdpi-textfield>
+        <sdpi-textfield setting="host" required placeholder="receiver.local"></sdpi-textfield>
     </sdpi-item>
     <sdpi-item label="Port">
         <sdpi-textfield setting="port" required placeholder="23"></sdpi-textfield>
@@ -21,28 +21,39 @@
         <sdpi-button onclick="connect(this)">Connect</sdpi-button>
     </sdpi-item>
     <sdpi-item label="Status">
-        <div id="status"></div>
+        <sdpi-textfield id="status" disabled></sdpi-textfield>
     </sdpi-item>
 
     <script>
         const { streamDeckClient } = SDPIComponents;
 
-        var logger = streamDeckClient.logger.createScope('Volume ActionUI');
+        function updateStatusText(text) {
+            let statusField = document.getElementById('status');
+            statusField.removeAttribute('disabled');
+            statusField.value = text;
+            statusField.setAttribute('disabled', 'true');
+        }
 
-        streamDeckClient.on('sendToPropertyInspector', (ev) => {
-            logger.debug('sendToPropertyInspector', JSON.stringify(ev, null, 2));
+        function connect(e) {
+            streamDeckClient.send('sendToPlugin', { message: 'connect' });
+        }
 
-            if (ev.payload && ev.payload.message === "status" && ev.payload.details ) {
-                document.getElementById('status').textContent = ev.payload.details;
+        streamDeckClient.didReceiveSettings.subscribe((ev) => {
+            if (ev.settings) {
+                if (ev.settings.host) {
+                    document.getElementById('host').value = ev.settings.host;
+                }
+                if (ev.settings.port) {
+                    document.getElementById('port').value = ev.settings.port;
+                }
             }
         });
 
-        function connect(e) {
-            streamDeckClient.send('sendToPlugin', { message: 'connect' })
-                .then((response) => {
-                    logger.debug('connect message response', JSON.stringify(response, null, 2));
-                });
-        }
+        streamDeckClient.sendToPropertyInspector.subscribe((ev) => {
+            if (ev.payload && ev.payload.message === "status" && ev.payload.details) {
+                updateStatusText(ev.payload.details);
+            }
+        });
     </script>
 </body>
 
