@@ -21,18 +21,11 @@
         <sdpi-button onclick="connect(this)">Connect</sdpi-button>
     </sdpi-item>
     <sdpi-item label="Status">
-        <sdpi-textfield id="status" disabled></sdpi-textfield>
+        <sdpi-textfield setting="statusMsg" disabled></sdpi-textfield>
     </sdpi-item>
 
     <script>
         const { streamDeckClient } = SDPIComponents;
-
-        function updateStatusText(text) {
-            let statusField = document.getElementById('status');
-            statusField.removeAttribute('disabled');
-            statusField.value = text;
-            statusField.setAttribute('disabled', 'true');
-        }
 
         function connect(e) {
             streamDeckClient.send('sendToPlugin', { message: 'connect' });
@@ -40,18 +33,9 @@
 
         streamDeckClient.didReceiveSettings.subscribe((ev) => {
             if (ev.settings) {
-                if (ev.settings.host) {
-                    document.getElementById('host').value = ev.settings.host;
-                }
-                if (ev.settings.port) {
-                    document.getElementById('port').value = ev.settings.port;
-                }
-            }
-        });
-
-        streamDeckClient.sendToPropertyInspector.subscribe((ev) => {
-            if (ev.payload && ev.payload.message === "status" && ev.payload.details) {
-                updateStatusText(ev.payload.details);
+                document.getElementById('host').value = ev.settings.host || "";
+                document.getElementById('port').value = ev.settings.port || "";
+                document.getElementById('statusMsg').value = ev.settings.statusMsg || "";
             }
         });
     </script>

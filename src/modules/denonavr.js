@@ -156,7 +156,7 @@ class DenonAVR {
 
 		this.#requestStatus();
 
-		this.eventEmitter.emit("connected");
+		this.eventEmitter.emit("connected", { receiver: this });
 	}
 
 	/**
