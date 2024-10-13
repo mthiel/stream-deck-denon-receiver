@@ -12,32 +12,51 @@
         Learn more about property inspector components at https://sdpi-components.dev/docs/components
     -->
     <sdpi-item label="Host">
-        <sdpi-textfield setting="host" required placeholder="receiver.local"></sdpi-textfield>
+        <sdpi-textfield id="host" setting="host" required placeholder="receiver.local" oninput="updateConnectButton()"></sdpi-textfield>
     </sdpi-item>
     <sdpi-item label="Port">
-        <sdpi-textfield setting="port" required placeholder="23"></sdpi-textfield>
+        <sdpi-textfield id="port" setting="port" required placeholder="23" oninput="updateConnectButton()"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Auto Connect" style="display: none;">
+        <sdpi-checkbox id="autoConnect" setting="autoConnect"></sdpi-checkbox>
     </sdpi-item>
     <sdpi-item>
-        <sdpi-button onclick="connect(this)">Connect</sdpi-button>
+        <sdpi-button id="connectBtn" onclick="connect(this)">Save & Connect</sdpi-button>
     </sdpi-item>
     <sdpi-item label="Status">
-        <sdpi-textfield setting="statusMsg" disabled></sdpi-textfield>
+        <sdpi-textarea id="statusMsg" setting="statusMsg" disabled></sdpi-textarea>
     </sdpi-item>
 
     <script>
         const { streamDeckClient } = SDPIComponents;
 
-        function connect(e) {
-            streamDeckClient.send('sendToPlugin', { message: 'connect' });
+        function updateConnectButton() {
+            let host = document.getElementById('host').value;
+            let port = document.getElementById('port').value;
+            document.getElementById('connectBtn').disabled = !host || !port;
+        }
+
+        async function connect(e) {
+            e.disabled = true;
+            document.getElementById('autoConnect').value = "checked";
+            await streamDeckClient.send('sendToPlugin', { message: 'connect' });
+            e.disabled = false;
         }
 
         streamDeckClient.didReceiveSettings.subscribe((ev) => {
             if (ev.settings) {
                 document.getElementById('host').value = ev.settings.host || "";
                 document.getElementById('port').value = ev.settings.port || "";
+                document.getElementById('autoConnect').value = ev.settings.autoConnect || false;
                 document.getElementById('statusMsg').value = ev.settings.statusMsg || "";
+                updateConnectButton();
             }
         });
+
+        // Ensure the connect button is updated after the page loads
+        setTimeout(() => {
+            updateConnectButton();
+        }, 1);
     </script>
 </body>
 

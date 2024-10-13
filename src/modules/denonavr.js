@@ -1,8 +1,18 @@
 import net from "net";
 import { TelnetSocket } from "telnet-stream";
 import { EventEmitter } from "events";
+import streamDeck, { LogLevel } from "@elgato/streamdeck";
 
 let logger;
+
+/**
+ * @typedef {Object} ReceiverEvent
+ * @property {DenonAVR} receiver - The receiver instance
+ * @property {Action} action - The action instance to send the event to
+ * @property {Object} [payload] - An optional payload object
+ * @property {LogLevel} [payload.level] - The log level for the message
+ * @property {string} [payload.message] - An optional message
+ */
 
 /**
  * Pool of active DenonAVR instances
@@ -18,13 +28,23 @@ let pool = [];
  * @property {number} volume - The current volume of the receiver
  * @property {boolean} muted - Whether the receiver is muted
  * @property {EventEmitter} eventEmitter - The event emitter for this instance
+ * @property {string[]} actionIds - The action IDs associated with this receiver connection
  */
 class DenonAVR {
 	power;
 	maxVolume = 85;
 	volume;
 	muted;
+
 	eventEmitter = new EventEmitter();
+	statusMsg = "Initializing...";
+	actionIds;
+
+	/**
+	 * The raw TCP socket supporting the telnet connection
+	 * @type {net.Socket}
+	 */
+	#rawSocket;
 
 	/**
 	 * The telnet socket connection to the receiver
@@ -33,7 +53,7 @@ class DenonAVR {
 	#telnet;
 
 	/**
-	 * The number of times the receiver has reconnected
+	 * The number of times in a row that we've retried connecting
 	 * @type {number}
 	 */
 	#reconnectCount = 0;
@@ -47,15 +67,36 @@ class DenonAVR {
 		return this.#id;
 	}
 
+	#host;
+	get host() {
+		return this.#host;
+	}
+
+	#port;
+	get port() {
+		return this.#port;
+	}
+
 	/**
 	 * Create a new DenonAVR instance
-	 * @param {string} host - The host to connect to
-	 * @param {number} port - The port to connect to
-	 * @param {Logger} [newLogger=null] - The logger to use for this instance.
+	 * @param {object} config - The configuration object
+	 * @param {string} config.host - The host to connect to
+	 * @param {number} config.port - The port to connect to
+	 * @param {string} config.actionId - The action ID requesting this connection
+	 * @param {Logger} [config.newLogger=null] - The logger to use for this instance.
 	 */
-	constructor(host, port, newLogger = null) {
-		if (!logger && newLogger) {
-			logger = newLogger.createScope("DenonAVR");
+	constructor(config = {}) {
+		let { host, port, newLogger, actionId } = config;
+
+		this.#host = host;
+		this.#port = port;
+
+		if (!logger) {
+			if (newLogger) {
+				logger = newLogger.createScope("DenonAVR");
+			} else {
+				logger = streamDeck.logger.createScope("DenonAVR");
+			}
 		}
 
 		this.#id = `${host}:${port}`;
@@ -64,24 +105,47 @@ class DenonAVR {
 		let instance = pool.find((instance) => instance.id == this.#id);
 		if (instance) {
 			logger.debug(`Reusing existing DenonAVR instance: ${this.#id}`);
+
+			let existingActionInstance = DenonAVR.getInstanceByContext(actionId);
+			if (existingActionInstance && existingActionInstance !== instance) {
+				// Remove the action context from the old instance
+				existingActionInstance.actionIds = existingActionInstance.actionIds.filter((id) => id !== actionId);
+			}
+
+			// Add the action context to the new instance
+			if (instance.actionIds.indexOf(actionId) === -1) {
+				instance.actionIds.push(actionId);
+			}
+
 			return instance;
 		}
 
-		this.connect(host, port);
+		// Initialize this instance with a first action context
+		this.actionIds = [actionId];
+
+		this.connect();
 
 		// Add the instance to the pool
 		pool.push(this);
 	}
 
 	/**
-	 * Connect to a receiver
-	 * @param {string} host - The host to connect to
-	 * @param {number} port - The port to connect to
+	 * Get an instance by an action ID
+	 * @param {string} actionId - The action ID
+	 * @returns {DenonAVR | undefined} The instance or undefined if not found
 	 */
-	async connect(host, port) {
-		logger.debug(`Connecting to Denon receiver: ${host}:${port}`);
+	static getInstanceByContext(actionId) {
+		return pool.find((instance) => instance.actionIds.indexOf(actionId) !== -1);
+	}
 
-		let telnet = new TelnetSocket(net.createConnection(port, host));
+	/**
+	 * Connect to a receiver
+	 */
+	async connect() {
+		logger.debug(`Connecting to Denon receiver: ${this.#host}:${this.#port}`);
+
+		let rawSocket = net.createConnection(this.#port, this.#host);
+		let telnet = new TelnetSocket(rawSocket);
 
 		// Connection lifecycle events
 		telnet.on("connect", () => this.#onConnect());
@@ -95,18 +159,24 @@ class DenonAVR {
 		// Data events
 		telnet.on("data", (data) => this.#onData(data));
 
-		// Assign the telnet socket to the instance
+		// Assign the sockets to the instance
+		this.#rawSocket = rawSocket;
 		this.#telnet = telnet;
 	}
 
 	/**
 	 * Disconnect from the receiver and remove it from the pool
 	 */
-	async disconnect() {
+	disconnect() {
 		let telnet = this.#telnet;
 
-		// Dispose of the telnet socket
+		// Remove the instance from the pool
+		pool = pool.filter((instance) => instance !== this);
+
+		// Dispose of the sockets
 		this.#telnet = null;
+		this.#rawSocket = null;
+
 		if (telnet && !telnet.destroyed) {
 			telnet.destroy();
 
@@ -117,9 +187,6 @@ class DenonAVR {
 				}
 			}, 1000);
 		}
-
-		// Remove the instance from the pool
-		pool = pool.filter((instance) => instance !== this);
 	}
 
 	async changeVolume(delta) {
@@ -132,8 +199,8 @@ class DenonAVR {
 
 		let command = `MV${newVolumeStr}`;
 
-		logger.debug(`Sending volume command: ${command}`);
 		telnet.write(command + "\r");
+		logger.debug(`Sent volume command: ${command}`);
 	}
 
 	async toggleMute() {
@@ -142,8 +209,47 @@ class DenonAVR {
 
 		let command = `MU${this.muted ? "OFF" : "ON"}`;
 
-		logger.debug(`Sending mute command: ${command}`);
 		telnet.write(command + "\r");
+		logger.debug(`Sent mute command: ${command}`);
+	}
+
+	/**
+	 * Send an event to all actions subscribed to this receiver
+	 * Also performs subscriber maintenance tasks
+	 * @param {string} eventName - The name of the event to send
+	 * @param {ReceiverEvent} [ev] - The event object
+	 */
+	#broadcastEvent(eventName, ev) {
+		let staleActionIds = [];
+
+		if (!ev) {
+			ev = {};
+		}
+
+		ev.receiver = this;
+
+		// Broadcast the event to all actions and collect any stale action IDs
+		this.actionIds.forEach((id) => {
+			delete ev.action;
+
+			let action = streamDeck.actions.getActionById(id);
+			if (action) {
+				ev.action = action;
+				this.eventEmitter.emit(eventName, ev);
+			} else {
+				staleActionIds.push(id);
+			}
+		});
+
+		// Remove any stale action subscriptions
+		staleActionIds.forEach((staleId) => {
+			this.actionIds = this.actionIds.filter((id) => id !== staleId);
+		});
+
+		// If there are no more actions subscribed to this receiver, disconnect
+		if (this.actionIds.length === 0 && this.#telnet) {
+			this.disconnect();
+		}
 	}
 
 	/**
@@ -153,29 +259,40 @@ class DenonAVR {
 		logger.info("Telnet connection established to Denon receiver.");
 
 		this.#reconnectCount = 0;
+		this.statusMsg = "Connected.";
+
+		this.#broadcastEvent("connected");
 
 		this.#requestStatus();
-
-		this.eventEmitter.emit("connected", { receiver: this });
 	}
 
 	/**
 	 * Handle connection closing event
+	 * Note: Logging in this state causes errors, so we hand it off to the actions to handle.
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
 		const msg = `Telnet connection to Denon receiver closed${hadError ? " due to error" : ""}.`;
 
-		this.eventEmitter.emit("closed", msg);
+		let ev = {
+			payload: {
+				level: hadError ? LogLevel.WARN : LogLevel.INFO,
+				message: msg,
+			},
+		};
+
+		this.#broadcastEvent("closed", ev);
 
 		// TODO: Test this out
 		if (this.#telnet && this.#reconnectCount < 10) {
 			this.#reconnectCount++;
+			ev.payload.level = LogLevel.INFO;
+			ev.payload.message = `Reconnecting to Denon receiver: ${this.#id}. Attempt ${this.#reconnectCount}`;
 
 			setTimeout(() => {
-				this.eventEmitter.emit("status", `Reconnecting to Denon receiver: ${this.#id}. Attempt ${this.#reconnectCount}`);
+				this.#broadcastEvent("status", ev);
 
-				this.connect(this.#telnet.remoteAddress, this.#telnet.remotePort);
+				this.connect();
 			}, 1000);
 		}
 	}
@@ -195,7 +312,9 @@ class DenonAVR {
 			switch (command) {
 				case "PW": // Power
 					this.power = parameter == "ON";
-					logger.debug(`Received power status: ${this.power}`);
+					logger.debug(`Updated receiver power status: ${this.power}`);
+
+					this.#broadcastEvent("status");
 					break;
 				case "MV": // Volume or max volume
 					if (parameter.startsWith("MAX")) {
@@ -205,18 +324,18 @@ class DenonAVR {
 						// Ex: "MAX 855" (Last digit is tenths and not significant)
 						let newMaxVolume = parseInt(parameter.substring(4, 6));
 						this.maxVolume = newMaxVolume;
-						logger.debug(`Received (probably) max volume: ${this.maxVolume}`);
+						logger.debug(`Updated receiver max volume: ${this.maxVolume}`);
 					} else {
 						this.volume = parseInt(parameter.substring(0, 2));
-						logger.debug(`Received current volume: ${this.volume}`);
+						logger.debug(`Updated receiver volume: ${this.volume}`);
 					}
 					break;
 				case "MU": // Mute
 					this.muted = parameter == "ON";
-					logger.debug(`Received mute status: ${this.muted}`);
+					logger.debug(`Updated receiver mute status: ${this.muted}`);
 					break;
 				default:
-					logger.debug(`Unknown message from receiver: ${line}`);
+					logger.warn(`Unhandled message from receiver: ${line}`);
 					break;
 			}
 		}
@@ -227,10 +346,16 @@ class DenonAVR {
 	 * @param {Error} error
 	 */
 	#onError(error) {
-		this.eventEmitter.emit("error", `${error.message} (${error.code})`);
+		if (error.code === "ENOTFOUND") {
+			// If the host can't be looked up, give up.
+			this.statusMsg = `Host not found: ${this.#host}`;
+			this.disconnect();
+		} else {
+			this.statusMsg = `Connection error: ${error.message} (${error.code})`;
+		}
 
-		// TODO: Determine if we should reconnect
-		logger.error("Error:", error);
+		logger.warn(this.statusMsg);
+		this.#broadcastEvent("status");
 	}
 
 	#requestStatus() {
@@ -243,4 +368,10 @@ class DenonAVR {
 	}
 }
 
+/**
+ * @typedef {import('./denonavr').ReceiverEvent} ReceiverEvent
+ */
+
 export { DenonAVR };
+
+/** @typedef {ReceiverEvent} ReceiverEvent */

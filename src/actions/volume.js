@@ -1,6 +1,18 @@
-import streamDeck, { action, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
-import { DenonAVR } from "../modules/denonavr";
+import streamDeck, { action, SingletonAction, LogLevel } from "@elgato/streamdeck";
+/** @typedef {import("@elgato/streamdeck").Logger} Logger */
+/** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
+/** @typedef {import("@elgato/streamdeck").PropertyInspectorDidAppearEvent} PropertyInspectorDidAppearEvent */
+/** @typedef {import("@elgato/streamdeck").PropertyInspectorDidDisappearEvent} PropertyInspectorDidDisappearEvent */
+/** @typedef {import("@elgato/streamdeck").DialRotateEvent} DialRotateEvent */
+/** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
+import { DenonAVR } from "../modules/denonavr";
+/** @typedef {import("../modules/denonavr").ReceiverEvent} ReceiverEvent */
+
+/**
+ * The (potentially scoped)logger for this action
+ * @type {Logger}
+ */
 let logger;
 
 /**
@@ -8,6 +20,7 @@ let logger;
  * @typedef {Object} Settings
  * @property {string} host - The host of the Denon AVR receiver.
  * @property {number} port - The port of the Denon AVR receiver.
+ * @property {boolean} [autoConnect=false] - Whether to automatically connect to the receiver when the action appears.
  * @property {string} statusMsg - A message to display in the PI's status area.
  */
 
@@ -17,15 +30,6 @@ let logger;
  */
 @action({ UUID: "com.mthiel.denon-controller.volume" })
 class VolumeAction extends SingletonAction {
-	#status = "Disconnected.";
-	get status() {
-		return this.#status;
-	}
-	set status(newStatus) {
-		this.#status = newStatus;
-		this.#refreshPIStatus();
-	}
-
 	/**
 	 * Create a new VolumeAction instance.
 	 * @param {Logger} [newLogger=null] - The logger to use for this action.
@@ -38,77 +42,76 @@ class VolumeAction extends SingletonAction {
 		}
 	}
 
+	/**
+	 * Handle the PI appearing.
+	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
+	 */
 	async onPropertyInspectorDidAppear(ev) {
-		let settings = await ev.action.getSettings();
-		// TODO: Update the PI with the current status
-
-		this.#refreshPIStatus();
+		// Refresh the PI's status message with the receiver's current status
+		if (ev.action.receiver) {
+			let settings = await ev.action.getSettings();
+			await ev.action.setSettings({ ...settings, statusMsg: ev.action.receiver.statusMsg });
+		}
 	}
 
-	// onDidReceiveSettings(ev) {
-	// 	this.#settings = ev.settings;
-	// }
+	/**
+	 * Handle the PI disappearing.
+	 * @param {PropertyInspectorDidDisappearEvent} ev - The event object.
+	 */
+	async onPropertyInspectorDidDisappear(ev) {
+		// Reset the PI/action's settings if they mismatch a connected receiver
+		let receiver = DenonAVR.getInstanceByContext(ev.action.id);
+		if (receiver) {
+			let settings = await ev.action.getSettings();
+			settings.host = receiver.host || settings.host;
+			settings.port = receiver.port || settings.port;
+			await ev.action.setSettings(settings);
+		}
+	}
 
 	/**
 	 * Try to create a new receiver connection (if necessary) before the action will appear.
 	 * @param {WillAppearEvent} ev - The event object.
 	 */
-	async onWillAppear(ev) {
-		this.#createReceiverConnection(ev);
+	onWillAppear(ev) {
+		if (ev.payload.settings.autoConnect) {
+			this.#createReceiverConnection(ev);
+		}
 	}
 
 	/**
 	 * Adjust the volume when the dial is rotated.
-	 * @param {Object} ev - The event object.
+	 * @param {DialRotateEvent} ev - The event object.
 	 */
-	// onDialRotate(ev) {
-	// 	if (!this.#receiver) return;
-
-	// 	let ticks = ev.payload.ticks;
-	// 	this.#receiver.changeVolume(ticks);
-	// }
+	onDialRotate(ev) {
+		let receiver = DenonAVR.getInstanceByContext(ev.action.id);
+		if (!receiver) return;
+		receiver.changeVolume(ev.payload.ticks);
+	}
 
 	/**
 	 * Toggle mute when the dial is pressed
 	 * @param {Object} ev - The event object.
 	 */
-	// onDialDown(ev) {
-	// 	if (!this.#receiver) return;
-
-	// 	this.#receiver.toggleMute();
-	// }
-
-	onSendToPlugin(ev) {
-		if (ev.payload && ev.payload.message === "connect") {
-			this.#createReceiverConnection(ev);
-		}
-	}
-
-	#refreshPIStatus() {
-		if (!this.status) return;
-
-		if (streamDeck.ui.current) {
-			streamDeck.ui.current.sendToPropertyInspector({
-				message: "status",
-				details: this.status
-			});
-		}
+	onDialDown(ev) {
+		let receiver = DenonAVR.getInstanceByContext(ev.action.id);
+		if (!receiver) return;
+		receiver.toggleMute();
 	}
 
 	/**
-	 * Get the action instance for a given receiver instance.
-	 * @param {DenonAVR} receiver - The receiver instance.
-	 * @returns {VolumeAction | null} The action instance, or null if the receiver is not associated with an action.
+	 * Handle a message from the plugin.
+	 * @param {SendToPluginEvent} ev - The event object.
 	 */
-	#getActionForReceiver(receiver) {
-		return null;
-		// let actions = streamDeck.actions;
-		// return actions.find((action) => action.receiver === receiver);
+	async onSendToPlugin(ev) {
+		if (ev.payload && ev.payload.message === "connect") {
+			await this.#createReceiverConnection(ev);
+		}
 	}
 
 	/**
 	 * Create a new receiver connection.
-	 * @param {WillAppearEvent} ev - The event object.
+	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
 	 */
 	async #createReceiverConnection(ev) {
 		let action = ev.action;
@@ -121,65 +124,71 @@ class VolumeAction extends SingletonAction {
 			settings = await action.getSettings();
 		}
 		if (!settings.host || !settings.port) {
-			settings.statusMsg = "Invalid settings.";
-			await action.setSettings(settings);
+			settings.statusMsg = "Missing host or port number.";
+			action.setSettings(settings);
 			return;
 		}
 
 		/** @type {DenonAVR} */
-		let receiver = action.receiver;
+		let receiver = DenonAVR.getInstanceByContext(action.id);
 		if (receiver) {
 			logger.info("Disconnecting from existing receiver before creating a new connection.");
-			settings.statusMsg = "Disconnecting...";
-			await action.setSettings(settings);
-			// this.#refreshPIStatus();
-
-			await receiver.disconnect();
-			action.receiver = null;
+			receiver.actionIds = receiver.actionIds.filter((id) => id !== action.id);
+			receiver.eventEmitter.removeAllListeners();
+			receiver.disconnect();
 		}
-
-		settings.statusMsg = "Connecting...";
-		await action.setSettings(settings);
-		// this.#refreshPIStatus();
 
 		logger.info(`Creating new receiver connection: ${settings.host}:${settings.port}.`);
-		receiver = new DenonAVR(settings.host, settings.port, logger);
+		receiver = new DenonAVR({ host: settings.host, port: settings.port, actionId: action.id, newLogger: logger });
+
+		settings.statusMsg = receiver.statusMsg;
+		action.setSettings(settings);
 
 		// Add event listeners for receiver events
+		receiver.eventEmitter.on("status", (ev) => this.#onReceiverStatus(ev));
 		receiver.eventEmitter.on("connected", (ev) => this.#onReceiverConnected(ev));
 		receiver.eventEmitter.on("closed", (ev) => this.#onReceiverDisconnected(ev));
-		receiver.eventEmitter.on("error", (ev) => this.#onReceiverError(ev));
-
-		action.receiver = receiver;
 	}
 
-	async #onReceiverConnected(ev) {
-		logger.info("Receiver connected.");
-		let receiver = ev.receiver;
-		if (!receiver) return;
-
-		let action = this.#getActionForReceiver(receiver);
-		if (!action) return;
-
-		let settings = await action.getSettings();
-		settings.statusMsg = "Connected.";
-		await action.setSettings(settings);
-	}
-
-	#onReceiverDisconnected(ev) {
-		if (ev.msg) {
-			logger.info("Receiver disconnected: ", ev.msg);
-		} else {
-			logger.info("Receiver disconnected.");
+	/**
+	 * Handle a receiver general status update.
+	 * @param {ReceiverEvent} ev - The event object.
+	 */
+	async #onReceiverStatus(ev) {
+		// Log a message on behalf of the receiver
+		if (ev.payload && ev.payload.message) {
+			logger.debug(ev.payload.message);
 		}
-		this.status = "Disconnected.";
-		this.#refreshPIStatus();
+
+		// Update the action's status message
+		let settings = await ev.action.getSettings();
+		settings.statusMsg = ev.receiver.statusMsg;
+		await ev.action.setSettings(settings);
 	}
 
-	#onReceiverError(ev) {
-		logger.warn("Receiver error: ", msg);
-		this.status = `Error: ${msg}`;
-		this.#refreshPIStatus();
+	/**
+	 * Handle a receiver connecting.
+	 * @param {ReceiverEvent} ev - The event object.
+	 */
+	async #onReceiverConnected(ev) {
+		// On a successful connection, allow auto-connections in the future
+		let settings = await ev.action.getSettings();
+		settings.autoConnect = true;
+		await ev.action.setSettings(settings);
+
+		// TODO: Handle action button UI updates
+
+		this.#onReceiverStatus(ev);
+	}
+
+	/**
+	 * Handle the receiver disconnecting.
+	 * @param {ReceiverEvent} ev - The event object.
+	 */
+	async #onReceiverDisconnected(ev) {
+		// TODO: Handle action button UI updates
+
+		this.#onReceiverStatus(ev);
 	}
 }
 
