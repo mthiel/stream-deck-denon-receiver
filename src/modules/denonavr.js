@@ -41,12 +41,6 @@ class DenonAVR {
 	actionIds;
 
 	/**
-	 * The raw TCP socket supporting the telnet connection
-	 * @type {net.Socket}
-	 */
-	#rawSocket;
-
-	/**
 	 * The telnet socket connection to the receiver
 	 * @type {TelnetSocket}
 	 */
@@ -63,19 +57,13 @@ class DenonAVR {
 	 * @type {string}
 	 */
 	#id;
-	get id() {
-		return this.#id;
-	}
+	get id() { return this.#id; }
 
 	#host;
-	get host() {
-		return this.#host;
-	}
+	get host() { return this.#host; }
 
 	#port;
-	get port() {
-		return this.#port;
-	}
+	get port() { return this.#port; }
 
 	/**
 	 * Create a new DenonAVR instance
@@ -159,8 +147,7 @@ class DenonAVR {
 		// Data events
 		telnet.on("data", (data) => this.#onData(data));
 
-		// Assign the sockets to the instance
-		this.#rawSocket = rawSocket;
+		// Assign the telnet socket to the instance
 		this.#telnet = telnet;
 	}
 
@@ -173,9 +160,8 @@ class DenonAVR {
 		// Remove the instance from the pool
 		pool = pool.filter((instance) => instance !== this);
 
-		// Dispose of the sockets
+		// Dispose of the telnet socket
 		this.#telnet = null;
-		this.#rawSocket = null;
 
 		if (telnet && !telnet.destroyed) {
 			telnet.destroy();
@@ -310,7 +296,7 @@ class DenonAVR {
 
 		this.#broadcastEvent("closed", ev);
 
-		// TODO: Test this out
+		// Attempt to reconnect if we haven't given up yet
 		if (this.#telnet && this.#reconnectCount < 10) {
 			this.#reconnectCount++;
 			ev.payload.level = LogLevel.INFO;
@@ -338,50 +324,62 @@ class DenonAVR {
 
 			switch (command) {
 				case "PW": // Power
-					this.power = parameter == "ON";
-					logger.debug(`Updated receiver power status: ${this.power}`);
-
-					this.#broadcastEvent("powerChanged");
+					this.#onPowerChanged(parameter);
 					break;
 				case "MV": // Volume or max volume
-					if (parameter.startsWith("MAX")) {
-						// The "MAX" extended command is not documented, but it is used by the receiver
-						// Guessing this is the current maximum volume supported by the receiver
-						// In testing, this value raises as the volume approaches the maximum
-						// Ex: "MAX 855"
-						let valueStr = parameter.substring(4);
-						let newMaxVolume = parseInt(valueStr);
-						if (valueStr.length === 3) {
-							newMaxVolume = newMaxVolume / 10;
-						}
-
-						this.maxVolume = newMaxVolume;
-						logger.debug(`Updated receiver max volume: ${this.maxVolume}`);
-
-						this.#broadcastEvent("maxVolumeChanged");
-					} else {
-						let newVolume = parseInt(parameter);
-						if (parameter.length === 3) {
-							newVolume = newVolume / 10;
-						}
-
-						this.volume = newVolume;
-						logger.debug(`Updated receiver volume to: ${this.volume}`);
-
-						this.#broadcastEvent("volumeChanged");
-					}
+					this.#onVolumeChanged(parameter);
 					break;
 				case "MU": // Mute
-					this.muted = parameter == "ON";
-					logger.debug(`Updated receiver mute status: ${this.muted}`);
-
-					this.#broadcastEvent("muteChanged");
+					this.#onMuteChanged(parameter);
 					break;
 				default:
 					logger.warn(`Unhandled message from receiver: ${line}`);
 					break;
 			}
 		}
+	}
+
+	#onPowerChanged(parameter) {
+		this.power = parameter == "ON";
+		logger.debug(`Updated receiver power status: ${this.power}`);
+
+		this.#broadcastEvent("powerChanged");
+	}
+
+	#onVolumeChanged(parameter) {
+		if (parameter.startsWith("MAX")) {
+			// The "MAX" extended command is not documented, but it is used by the receiver
+			// Guessing this is the current maximum volume supported by the receiver
+			// In testing, this value raises as the volume approaches the maximum
+			// Ex: "MAX 855"
+			let valueStr = parameter.substring(4);
+			let newMaxVolume = parseInt(valueStr);
+			if (valueStr.length === 3) {
+				newMaxVolume = newMaxVolume / 10;
+			}
+
+			this.maxVolume = newMaxVolume;
+			logger.debug(`Updated receiver max volume: ${this.maxVolume}`);
+
+			this.#broadcastEvent("maxVolumeChanged");
+		} else {
+			let newVolume = parseInt(parameter);
+			if (parameter.length === 3) {
+				newVolume = newVolume / 10;
+			}
+
+			this.volume = newVolume;
+			logger.debug(`Updated receiver volume to: ${this.volume}`);
+
+			this.#broadcastEvent("volumeChanged");
+		}
+	}
+
+	#onMuteChanged(parameter) {
+		this.muted = parameter == "ON";
+		logger.debug(`Updated receiver mute status: ${this.muted}`);
+
+		this.#broadcastEvent("muteChanged");
 	}
 
 	/**
