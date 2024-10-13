@@ -341,25 +341,41 @@ class DenonAVR {
 					this.power = parameter == "ON";
 					logger.debug(`Updated receiver power status: ${this.power}`);
 
-					this.#broadcastEvent("status");
+					this.#broadcastEvent("powerChanged");
 					break;
 				case "MV": // Volume or max volume
 					if (parameter.startsWith("MAX")) {
 						// The "MAX" extended command is not documented, but it is used by the receiver
 						// Guessing this is the current maximum volume supported by the receiver
 						// In testing, this value raises as the volume approaches the maximum
-						// Ex: "MAX 855" (Last digit is tenths and not significant)
-						let newMaxVolume = parseInt(parameter.substring(4, 6));
+						// Ex: "MAX 855"
+						let valueStr = parameter.substring(4);
+						let newMaxVolume = parseInt(valueStr);
+						if (valueStr.length === 3) {
+							newMaxVolume = newMaxVolume / 10;
+						}
+
 						this.maxVolume = newMaxVolume;
 						logger.debug(`Updated receiver max volume: ${this.maxVolume}`);
+
+						this.#broadcastEvent("maxVolumeChanged");
 					} else {
-						this.volume = parseInt(parameter.substring(0, 2));
-						logger.debug(`Updated receiver volume: ${this.volume}`);
+						let newVolume = parseInt(parameter);
+						if (parameter.length === 3) {
+							newVolume = newVolume / 10;
+						}
+
+						this.volume = newVolume;
+						logger.debug(`Updated receiver volume to: ${this.volume}`);
+
+						this.#broadcastEvent("volumeChanged");
 					}
 					break;
 				case "MU": // Mute
 					this.muted = parameter == "ON";
 					logger.debug(`Updated receiver mute status: ${this.muted}`);
+
+					this.#broadcastEvent("muteChanged");
 					break;
 				default:
 					logger.warn(`Unhandled message from receiver: ${line}`);

@@ -148,6 +148,7 @@ class VolumeAction extends SingletonAction {
 		receiver.eventEmitter.on("status", (ev) => this.#onReceiverStatus(ev));
 		receiver.eventEmitter.on("connected", (ev) => this.#onReceiverConnected(ev));
 		receiver.eventEmitter.on("closed", (ev) => this.#onReceiverDisconnected(ev));
+		receiver.eventEmitter.on("volumeChanged", (ev) => this.#onReceiverVolumeChanged(ev));
 	}
 
 	/**
@@ -189,6 +190,19 @@ class VolumeAction extends SingletonAction {
 		// TODO: Handle action button UI updates
 
 		this.#onReceiverStatus(ev);
+	}
+
+	/**
+	 * Handle a receiver volume changing.
+	 * @param {ReceiverEvent} ev - The event object.
+	 */
+	async #onReceiverVolumeChanged(ev) {
+		ev.action.setFeedback({
+			indicator: {
+				value: (ev.receiver.volume / ev.receiver.maxVolume) * 100
+			},
+			value: `Vol: ${ev.receiver.volume}`
+		});
 	}
 }
 
