@@ -4,6 +4,7 @@ import streamDeck, { action, SingletonAction, LogLevel } from "@elgato/streamdec
 /** @typedef {import("@elgato/streamdeck").PropertyInspectorDidAppearEvent} PropertyInspectorDidAppearEvent */
 /** @typedef {import("@elgato/streamdeck").PropertyInspectorDidDisappearEvent} PropertyInspectorDidDisappearEvent */
 /** @typedef {import("@elgato/streamdeck").DialRotateEvent} DialRotateEvent */
+/** @typedef {import("@elgato/streamdeck").DialDownEvent} DialDownEvent */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
 import { DenonAVR } from "../modules/denonavr";
@@ -96,7 +97,7 @@ class VolumeAction extends SingletonAction {
 
 	/**
 	 * Toggle mute when the dial is pressed
-	 * @param {Object} ev - The event object.
+	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
 		let receiver = DenonAVR.getInstanceByContext(ev.action.id);
