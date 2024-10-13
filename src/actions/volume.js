@@ -9,6 +9,11 @@ import streamDeck, { action, SingletonAction, LogLevel } from "@elgato/streamdec
 import { DenonAVR } from "../modules/denonavr";
 /** @typedef {import("../modules/denonavr").ReceiverEvent} ReceiverEvent */
 
+const images = {
+	unmuted: "imgs/actions/volume/volume2",
+	muted: "imgs/actions/volume/volumeMute"
+};
+
 /**
  * The (potentially scoped)logger for this action
  * @type {Logger}
@@ -149,6 +154,7 @@ class VolumeAction extends SingletonAction {
 		receiver.eventEmitter.on("connected", (ev) => this.#onReceiverConnected(ev));
 		receiver.eventEmitter.on("closed", (ev) => this.#onReceiverDisconnected(ev));
 		receiver.eventEmitter.on("volumeChanged", (ev) => this.#onReceiverVolumeChanged(ev));
+		receiver.eventEmitter.on("muteChanged", (ev) => this.#onReceiverMuteChanged(ev));
 	}
 
 	/**
@@ -196,13 +202,36 @@ class VolumeAction extends SingletonAction {
 	 * Handle a receiver volume changing.
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	async #onReceiverVolumeChanged(ev) {
+	#onReceiverVolumeChanged(ev) {
 		ev.action.setFeedback({
 			indicator: {
 				value: (ev.receiver.volume / ev.receiver.maxVolume) * 100
 			},
 			value: `Vol: ${ev.receiver.volume}`
 		});
+	}
+
+	/**
+	 * Handle a receiver mute changing.
+	 * @param {ReceiverEvent} ev - The event object.
+	 */
+	#onReceiverMuteChanged(ev) {
+		if (ev.receiver.muted) {
+			ev.action.setFeedback({
+				value: "Muted",
+				indicator: {
+					value: 0
+				}
+			});
+			ev.action.setFeedback({
+				icon: images.muted
+			});
+		} else {
+			ev.action.setFeedback({
+				icon: images.unmuted
+			});
+			this.#onReceiverVolumeChanged(ev);
+		}
 	}
 }
 
