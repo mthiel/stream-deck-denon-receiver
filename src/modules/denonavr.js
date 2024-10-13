@@ -189,28 +189,55 @@ class DenonAVR {
 		}
 	}
 
+	/**
+	 * Change the volume by the given delta
+	 * @param {number} delta - The amount to change the volume by
+	 * @returns {boolean} Whether the command was sent successfully
+	 */
 	async changeVolume(delta) {
 		let telnet = this.#telnet;
-		if (!telnet || !this.power || this.volume === undefined) return;
+		if (!telnet || !this.power || this.volume === undefined) return false;
 
-		let newVolumeStr = Math.max(0, Math.min(this.maxVolume, Math.round(this.volume + delta)))
-			.toString()
-			.padStart(2, "0");
+		try {
+			let command = "MV";
 
-		let command = `MV${newVolumeStr}`;
+			if (delta === 1) {
+				command += "UP";
+			} else if (delta === -1) {
+				command += "DOWN";
+			} else {
+				let newVolumeStr = Math.max(0, Math.min(this.maxVolume, Math.round(this.volume + delta)))
+					.toString()
+					.padStart(2, "0");
+				command += newVolumeStr;
+			}
 
-		telnet.write(command + "\r");
-		logger.debug(`Sent volume command: ${command}`);
+			telnet.write(command + "\r");
+			logger.debug(`Sent volume command: ${command}`);
+		} catch (error) {
+			return false;
+		}
+		return true;
 	}
 
+	/**
+	 * Toggle the mute state
+	 * @returns {boolean} Whether the command was sent successfully
+	 */
 	async toggleMute() {
 		let telnet = this.#telnet;
-		if (!telnet || !this.power || this.muted === undefined) return;
+		if (!telnet || !this.power || this.muted === undefined) return false;
 
-		let command = `MU${this.muted ? "OFF" : "ON"}`;
+		try {
+			let command = `MU${this.muted ? "OFF" : "ON"}`;
 
-		telnet.write(command + "\r");
-		logger.debug(`Sent mute command: ${command}`);
+			telnet.write(command + "\r");
+			logger.debug(`Sent mute command: ${command}`);
+		} catch (error) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
