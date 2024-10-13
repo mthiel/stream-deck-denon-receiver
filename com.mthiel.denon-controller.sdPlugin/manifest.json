@@ -6,12 +6,11 @@
 		{
 			"Name": "Volume Control",
 			"UUID": "com.mthiel.denon-controller.volume",
-			"Icon": "imgs/actions/volume/icon",
+			"Icon": "imgs/actions/volume/volume2",
 			"Tooltip": "Displays the current volume and allows for adjustment.",
 			"PropertyInspectorPath": "ui/volume.html",
-			"Controllers": [ "Keypad", "Encoder" ],
+			"Controllers": [ "Encoder" ],
 			"Encoder": {
-				"background": "touchscreen-background",
 				"layout": "$B1",
 				"TriggerDescription": {
 					"Push": "Mute/Unmute",
@@ -21,7 +20,7 @@
 			},
 			"States": [
 				{
-					"Image": "imgs/actions/volume/key"
+					"Image": "imgs/actions/volume/volume2"
 				}
 			]
 		}
