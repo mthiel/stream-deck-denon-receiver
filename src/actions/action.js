@@ -31,12 +31,13 @@ class PluginAction extends SingletonAction {
 	 */
 	async onPropertyInspectorDidAppear(ev) {
 		// Refresh the PI's status message with the receiver's current status
-
 		let receiver = DenonAVR.getByContext(ev.action.id);
 		if (receiver) {
 			let settings = await ev.action.getSettings();
 			await ev.action.setSettings({ ...settings, statusMsg: receiver.statusMsg });
 		}
+
+		// TODO: Add automatic detection of receivers to inform the PI
 	}
 
 	/**
