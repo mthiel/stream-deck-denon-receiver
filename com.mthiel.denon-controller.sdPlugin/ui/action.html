@@ -2,85 +2,75 @@
 <html>
 
 <head lang="en">
-    <title>Denon Controller Settings</title>
-    <meta charset="utf-8" />
-    <script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+	<title>Denon Controller Settings</title>
+	<meta charset="utf-8" />
+	<script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
 </head>
 
 <body>
-    <sdpi-item label="Receiver">
-        <sdpi-select id="receiver" setting="receiver" datasource="getDetectedReceivers" loading="Searching for receivers...">
-        </sdpi-select>
-    </sdpi-item>
-    <sdpi-item label="Host">
-        <!-- TODO: Add hostname validation -->
-        <sdpi-textfield id="host" setting="host" required placeholder="receiver.local"
-            oninput="updateConnectButton()"></sdpi-textfield>
-    </sdpi-item>
-    <sdpi-item label="Port">
-        <sdpi-textfield id="port" setting="port" required pattern="[0-9]+" placeholder="23"
-            oninput="updateConnectButton()"></sdpi-textfield>
-    </sdpi-item>
-    <sdpi-item label="Auto Connect" style="display: none;">
-        <sdpi-checkbox id="autoConnect" setting="autoConnect"></sdpi-checkbox>
-    </sdpi-item>
-    <sdpi-item>
-        <sdpi-button id="connectBtn" onclick="connect(this)">Save & Connect</sdpi-button>
-    </sdpi-item>
-    <sdpi-item label="Status">
-        <sdpi-textarea id="statusMsg" setting="statusMsg" disabled></sdpi-textarea>
-    </sdpi-item>
+	<sdpi-item label="Receiver">
+		<sdpi-select id="detectedReceiver" setting="detectedReceiver" datasource="getDetectedReceivers"
+			loading="Searching for receivers...">
+		</sdpi-select>
+	</sdpi-item>
+	<sdpi-item label="Host">
+		<!-- TODO: Add hostname validation -->
+		<sdpi-textfield id="host" setting="host" required placeholder="receiver.local"
+			oninput="updateConnectButton()"></sdpi-textfield>
+	</sdpi-item>
+	<sdpi-item label="Auto Connect" style="display: none;">
+		<sdpi-checkbox id="autoConnect" setting="autoConnect"></sdpi-checkbox>
+	</sdpi-item>
+	<sdpi-item>
+		<sdpi-button id="connectBtn" onclick="connect(this)">Save & Connect</sdpi-button>
+	</sdpi-item>
+	<sdpi-item label="Status">
+		<sdpi-textarea id="statusMsg" setting="statusMsg" disabled></sdpi-textarea>
+	</sdpi-item>
 
-    <script>
-        const { streamDeckClient } = SDPIComponents;
+	<script>
+		const { streamDeckClient } = SDPIComponents;
 
-        function updateConnectButton() {
-            let host = document.getElementById('host').value;
-            let port = document.getElementById('port').value;
-            document.getElementById('connectBtn').disabled = !host || !port;
-        }
+		function updateElements() {
+			const host = document.getElementById('host');
+			const connectBtn = document.getElementById('connectBtn');
+			const detectedReceiver = document.getElementById('detectedReceiver');
 
-        async function connect(e) {
-            e.disabled = true;
-            document.getElementById('autoConnect').value = "checked";
-            await streamDeckClient.send('sendToPlugin', { message: 'connect' });
-            e.disabled = false;
-        }
+			host.disabled = !!detectedReceiver.value;
+			connectBtn.disabled = !host.value;
+		}
 
-        streamDeckClient.didReceiveSettings.subscribe((ev) => {
-            // Do we even need this event?
-            if (ev.settings) {
-                document.getElementById('host').value = ev.settings.host || "";
-                document.getElementById('port').value = ev.settings.port || "";
-                document.getElementById('autoConnect').value = ev.settings.autoConnect || false;
-                document.getElementById('statusMsg').value = ev.settings.statusMsg || "";
-                updateConnectButton();
-            }
-        });
+		async function connect(el) {
+			el.disabled = true;
+			await streamDeckClient.send('sendToPlugin', { event: 'connect' });
+			el.disabled = false;
+		}
 
-        async function updateLayoutForAction() {
-            let actionIdArray = (await streamDeckClient.getConnectionInfo()).actionInfo.action.split(".");
-            let actionId = actionIdArray[actionIdArray.length - 1];
+		async function updateLayoutForAction() {
+			let actionIdArray = (await streamDeckClient.getConnectionInfo()).actionInfo.action.split(".");
+			let actionId = actionIdArray[actionIdArray.length - 1];
 
-            switch (actionId) {
-                case "power":
-                    document.title = "Denon Controller - Power";
-                    break;
-                case "volume":
-                    document.title = "Denon Controller - Volume";
-                    break;
-                case "source":
-                    document.title = "Denon Controller - Source";
-                    break;
-            }
-        }
+			switch (actionId) {
+				case "power":
+					document.title = "Denon Controller - Power";
+					break;
+				case "volume":
+					document.title = "Denon Controller - Volume";
+					break;
+				case "source":
+					document.title = "Denon Controller - Source";
+					break;
+			}
+		}
 
-        // Ensure the connect button is updated after the page loads
-        setTimeout(() => {
-            updateConnectButton();
-            updateLayoutForAction();
-        }, 1);
-    </script>
+		streamDeckClient.didReceiveSettings.subscribe(updateElements);
+
+		// Ensure the connect button is updated after the page loads
+		setTimeout(() => {
+			updateConnectButton();
+			updateLayoutForAction();
+		}, 1);
+	</script>
 </body>
 
 </html>

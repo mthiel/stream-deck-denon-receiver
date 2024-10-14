@@ -1,6 +1,8 @@
 import net from "net";
+import dgram from "dgram";
 import { TelnetSocket } from "telnet-stream";
 import { EventEmitter } from "events";
+import { setTimeout } from "timers/promises";
 import streamDeck from "@elgato/streamdeck";
 
 /**
@@ -57,22 +59,17 @@ class DenonAVR {
 	#host;
 	get host() { return this.#host; }
 
-	#port;
-	get port() { return this.#port; }
-
 	/**
 	 * Create a new DenonAVR instance
 	 * @param {object} config - The configuration object
 	 * @param {string} config.host - The host to connect to
-	 * @param {number} config.port - The port to connect to
 	 * @param {string} config.actionId - The action ID requesting this connection
 	 */
 	constructor(config = {}) {
-		let { host, port, actionId } = config;
+		let { host, actionId } = config;
 
 		this.#host = host;
-		this.#port = port;
-		this.#id = `${host}:${port}`;
+		this.#id = `${host}`;
 
 		// Check if the instance already exists and reuse it
 		let instance = pool.find((instance) => instance.id == this.#id);
@@ -112,12 +109,45 @@ class DenonAVR {
 	}
 
 	/**
+	 * Get a list of detected receivers on the network
+	 * @returns {Promise<string[]>} A promise that resolves to an array of detected receiver addresses
+	 */
+	static async getDetectedReceiverAddresses() {
+		let addresses = [];
+
+		const socket = dgram.createSocket("udp4");
+		socket.on("listening", () => {
+			const broadcastAddress = "239.255.255.250";
+			const broadcastPort = 1900;
+			const message = Buffer.from(
+				'M-SEARCH * HTTP/1.1\r\n' +
+				'HOST: ' + broadcastAddress + ':' + broadcastPort + '\r\n' +
+				'MAN: "ssdp:discover"\r\n' +
+				'ST: urn:schemas-denon-com:device:ACT-Denon:1\r\n' +
+				'MX: 1\r\n' +
+				'\r\n'
+			);
+			socket.send(message, 0, message.length, broadcastPort, broadcastAddress);
+			streamDeck.logger.debug(`Sent SSDP M-SEARCH message for Denon receivers`);
+		});
+		socket.on("message", (message, rinfo) => {
+			addresses.push(rinfo.address);
+		});
+		socket.bind(null);
+
+		await setTimeout(1000);
+		socket.close();
+
+		return addresses;
+	}
+
+	/**
 	 * Connect to a receiver
 	 */
 	async connect() {
-		streamDeck.logger.debug(`Connecting to Denon receiver: ${this.#host}:${this.#port}`);
+		streamDeck.logger.debug(`Connecting to Denon receiver: ${this.#host}`);
 
-		let rawSocket = net.createConnection(this.#port, this.#host);
+		let rawSocket = net.createConnection(23, this.#host);
 		let telnet = new TelnetSocket(rawSocket);
 
 		// Connection lifecycle events

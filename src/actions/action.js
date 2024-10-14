@@ -2,6 +2,7 @@ import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
 /** @typedef {import("@elgato/streamdeck").PropertyInspectorDidAppearEvent} PropertyInspectorDidAppearEvent */
 /** @typedef {import("@elgato/streamdeck").PropertyInspectorDidDisappearEvent} PropertyInspectorDidDisappearEvent */
+/** @typedef {import("@elgato/streamdeck").DidReceiveSettingsEvent} DidReceiveSettingsEvent */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
 import { DenonAVR } from "../modules/denonavr";
@@ -11,7 +12,6 @@ import { DenonAVR } from "../modules/denonavr";
  * Settings type for actions
  * @typedef {Object} ActionSettings
  * @property {string} host - The host of the Denon AVR receiver.
- * @property {number} port - The port of the Denon AVR receiver.
  * @property {boolean} [autoConnect=false] - Whether to automatically connect to the receiver when the action appears.
  * @property {string} statusMsg - A message to display in the PI's status area.
  */
@@ -21,9 +21,9 @@ import { DenonAVR } from "../modules/denonavr";
  * @extends SingletonAction
  */
 class PluginAction extends SingletonAction {
-    constructor() {
-        super();
-    }
+	constructor() {
+		super();
+	}
 
 	/**
 	 * Handle the PI appearing.
@@ -36,8 +36,6 @@ class PluginAction extends SingletonAction {
 			let settings = await ev.action.getSettings();
 			await ev.action.setSettings({ ...settings, statusMsg: receiver.statusMsg });
 		}
-
-		// TODO: Add automatic detection of receivers to inform the PI
 	}
 
 	/**
@@ -49,13 +47,28 @@ class PluginAction extends SingletonAction {
 		let receiver = DenonAVR.getByContext(ev.action.id);
 		if (receiver) {
 			let settings = await ev.action.getSettings();
-			settings.host = receiver.host || settings.host;
-			settings.port = receiver.port || settings.port;
-			await ev.action.setSettings(settings);
+			if (settings.host !== receiver.host) {
+				settings.host = receiver.host;
+				await ev.action.setSettings(settings);
+			}
 		}
 	}
 
-    /**
+	/**
+	 * Handle the action's settings being updated.
+	 * @param {DidReceiveSettingsEvent} ev - The event object.
+	 */
+	onDidReceiveSettings(ev) {
+		let settings = ev.payload.settings;
+		if (!settings) return;
+
+		if (settings.detectedReceiver) {
+			settings.host = settings.detectedReceiver;
+		}
+		ev.action.setSettings(settings);
+	}
+
+	/**
 	 * Try to create a new receiver connection (if necessary) before the action will appear.
 	 * @param {WillAppearEvent} ev - The event object.
 	 */
@@ -65,20 +78,29 @@ class PluginAction extends SingletonAction {
 		}
 	}
 
-   	/**
-	 * Handle a message from the plugin.
-	 * @param {SendToPluginEvent} ev - The event object.
-	 */
+	/**
+* Handle a message from the plugin.
+* @param {SendToPluginEvent} ev - The event object.
+*/
 	async onSendToPlugin(ev) {
-		if (ev.payload && ev.payload.message === "connect") {
-			await this.createReceiverConnection(ev);
+		const { event } = ev.payload;
+
+		switch (event) {
+			case "connect":
+				await this.createReceiverConnection(ev);
+				break;
+			case "getDetectedReceivers":
+				this.getDetectedReceivers(ev);
+				break;
+			default:
+				streamDeck.logger.warn(`Received unknown event: ${event}`);
 		}
 	}
 
-    /**
+	/**
 	 * Create a new receiver connection.
 	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-     * @returns {DenonAVR | undefined} The newly createdreceiver object.
+	 * @returns {DenonAVR | undefined} The newly createdreceiver object.
 	 */
 	async createReceiverConnection(ev) {
 		let action = ev.action;
@@ -90,8 +112,8 @@ class PluginAction extends SingletonAction {
 		} else {
 			settings = await action.getSettings();
 		}
-		if (!settings.host || !settings.port) {
-			settings.statusMsg = "Missing host or port number.";
+		if (!settings.host) {
+			settings.statusMsg = "Missing host address.";
 			action.setSettings(settings);
 			return;
 		}
@@ -104,8 +126,8 @@ class PluginAction extends SingletonAction {
 			receiver.disconnect();
 		}
 
-		streamDeck.logger.info(`Creating new receiver connection: ${settings.host}:${settings.port}.`);
-		receiver = new DenonAVR({ host: settings.host, port: settings.port, actionId: action.id });
+		streamDeck.logger.info(`Creating new receiver connection: ${settings.host}.`);
+		receiver = new DenonAVR({ host: settings.host, actionId: action.id });
 
 		settings.statusMsg = receiver.statusMsg;
 		action.setSettings(settings);
@@ -115,7 +137,28 @@ class PluginAction extends SingletonAction {
 		receiver.eventEmitter.on("connected", (ev) => this.#onReceiverConnected(ev));
 		receiver.eventEmitter.on("closed", (ev) => this.#onReceiverDisconnected(ev));
 
-        return receiver;
+		return receiver;
+	}
+
+	/**
+	 * Get a list of detected receivers on the network.
+	 * @param {SendToPluginEvent} ev - The event object.
+	 */
+	async getDetectedReceivers(ev) {
+		const receiverAddresses = await DenonAVR.getDetectedReceiverAddresses();
+		if (receiverAddresses.length === 0) {
+			return;
+		}
+
+		let addressList = [
+			{ label: "Select a detected receiver", value: "" },
+			...receiverAddresses.map((address) => ({ label: address, value: address }))
+		];
+
+		streamDeck.ui.current.sendToPropertyInspector({
+			event: "getDetectedReceivers",
+			items: addressList
+		});
 	}
 
 	/**
@@ -142,10 +185,10 @@ class PluginAction extends SingletonAction {
 		this.#onReceiverStatus(ev);
 	}
 
-  	/**
-	 * Handle the receiver disconnecting.
-	 * @param {ReceiverEvent} ev - The event object.
-	 */
+/**
+ * Handle the receiver disconnecting.
+ * @param {ReceiverEvent} ev - The event object.
+ */
 	async #onReceiverDisconnected(ev) {
 		// TODO: Handle action button UI updates
 
