@@ -1,13 +1,11 @@
-import streamDeck, { LogLevel } from "@elgato/streamdeck";
-const logger = streamDeck.logger.createScope("Denon AVR Plugin");
+import streamDeck from "@elgato/streamdeck";
 
 import { VolumeAction } from "./actions/volume";
-
-// We can enable "trace" logging so that all messages between the Stream Deck, and the plugin are recorded.
-logger.setLevel(LogLevel.TRACE);
+import { PowerAction } from "./actions/power";
 
 // Register the volume control action.
-streamDeck.actions.registerAction(new VolumeAction(logger));
+streamDeck.actions.registerAction(new VolumeAction());
+streamDeck.actions.registerAction(new PowerAction());
 
 // Finally, connect to the Stream Deck.
 streamDeck.connect();
