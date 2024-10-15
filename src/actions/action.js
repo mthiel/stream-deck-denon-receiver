@@ -21,16 +21,16 @@ import { DenonAVR } from "../modules/denonavr";
  * @extends SingletonAction
  */
 class PluginAction extends SingletonAction {
-	constructor() {
-		super();
-	}
+	/* 
+	 * TODO: Rework this base class to manage the receiver connections
+	 * instead of having the DenonAVR class manage the action instances.
+	 */
 
 	/**
-	 * Handle the PI appearing.
+	 * Refresh the PI's status message with the receiver's current status when it appears.
 	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
 	 */
 	async onPropertyInspectorDidAppear(ev) {
-		// Refresh the PI's status message with the receiver's current status
 		let receiver = DenonAVR.getByContext(ev.action.id);
 		if (receiver) {
 			let settings = await ev.action.getSettings();
@@ -39,11 +39,10 @@ class PluginAction extends SingletonAction {
 	}
 
 	/**
-	 * Handle the PI disappearing.
+	 * Clean-up the PI settings when it's disappearing.
 	 * @param {PropertyInspectorDidDisappearEvent} ev - The event object.
 	 */
 	async onPropertyInspectorDidDisappear(ev) {
-		// Reset the PI/action's settings if they mismatch a connected receiver
 		let receiver = DenonAVR.getByContext(ev.action.id);
 		if (receiver) {
 			let settings = await ev.action.getSettings();
@@ -55,7 +54,7 @@ class PluginAction extends SingletonAction {
 	}
 
 	/**
-	 * Handle the action's settings being updated.
+	 * Sync up the settings fields on behalf of the PI when the settings change.
 	 * @param {DidReceiveSettingsEvent} ev - The event object.
 	 */
 	onDidReceiveSettings(ev) {
@@ -73,16 +72,16 @@ class PluginAction extends SingletonAction {
 	 * @param {WillAppearEvent} ev - The event object.
 	 */
 	onWillAppear(ev) {
-		streamDeck.logger.info(`onWillAppear for action id: ${ev.action.id}`);
+		streamDeck.logger.debug(`onWillAppear for action id: ${ev.action.id}`);
 		if (ev.payload.settings.autoConnect) {
 			this.createReceiverConnection(ev);
 		}
 	}
 
 	/**
-* Handle a message from the plugin.
-* @param {SendToPluginEvent} ev - The event object.
-*/
+	 * Handle a message from the plugin.
+	 * @param {SendToPluginEvent} ev - The event object.
+	 */
 	async onSendToPlugin(ev) {
 		const { event } = ev.payload;
 
@@ -101,7 +100,7 @@ class PluginAction extends SingletonAction {
 	/**
 	 * Create a new receiver connection.
 	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-	 * @returns {DenonAVR | undefined} The newly createdreceiver object.
+	 * @returns {Promise<DenonAVR | undefined>} The newly created receiver object.
 	 */
 	async createReceiverConnection(ev) {
 		let action = ev.action;
@@ -123,7 +122,7 @@ class PluginAction extends SingletonAction {
 		if (receiver) {
 			streamDeck.logger.info("Disconnecting this action from existing receiver before creating a new connection.");
 			receiver.actionIds = receiver.actionIds.filter((id) => id !== action.id);
-			receiver.eventEmitter.removeAllListeners();
+			receiver.eventEmitter.removeAllListeners(); // TODO: This is not a good idea.
 			receiver.disconnect();
 		}
 
@@ -139,6 +138,7 @@ class PluginAction extends SingletonAction {
 		action.setSettings(settings);
 
 		// Add event listeners for receiver events
+		// TODO: How do I avoid binding these listeners multiple times?
 		receiver.eventEmitter.on("status", (ev) => this.#onReceiverStatus(ev));
 		receiver.eventEmitter.on("connected", (ev) => this.#onReceiverConnected(ev));
 		receiver.eventEmitter.on("closed", (ev) => this.#onReceiverDisconnected(ev));
@@ -161,10 +161,12 @@ class PluginAction extends SingletonAction {
 			...receiverAddresses.map((address) => ({ label: address, value: address }))
 		];
 
-		streamDeck.ui.current.sendToPropertyInspector({
-			event: "getDetectedReceivers",
-			items: addressList
-		});
+		if (streamDeck.ui.current) {
+			streamDeck.ui.current.sendToPropertyInspector({
+				event: "getDetectedReceivers",
+				items: addressList
+			});
+		}
 	}
 
 	/**
@@ -202,10 +204,4 @@ class PluginAction extends SingletonAction {
 	}
 }
 
-/** 
- * @typedef {import('./action').ActionSettings} ActionSettings
- */
-
 export { PluginAction };
-
-/** @typedef {ActionSettings} ActionSettings */

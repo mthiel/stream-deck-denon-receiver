@@ -1,4 +1,6 @@
 import streamDeck, { action } from "@elgato/streamdeck";
+/** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
+/** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 /** @typedef {import("@elgato/streamdeck").DialRotateEvent} DialRotateEvent */
 /** @typedef {import("@elgato/streamdeck").DialDownEvent} DialDownEvent */
 
@@ -19,13 +21,6 @@ const images = {
  */
 @action({ UUID: "com.mthiel.denon-controller.volume" })
 class VolumeAction extends PluginAction {
-	/**
-	 * Create a new VolumeAction instance.
-	 */
-	constructor() {
-		super();
-	}
-
 	/**
 	 * Adjust the volume when the dial is rotated.
 	 * @param {DialRotateEvent} ev - The event object.
@@ -56,7 +51,7 @@ class VolumeAction extends PluginAction {
     /**
 	 * Create a new receiver connection.
 	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-     * @returns {DenonAVR | undefined} The newly createdreceiver object.
+     * @returns {Promise<DenonAVR | undefined>} The newly created receiver object.
 	 */
 	async createReceiverConnection(ev) {
 		let receiver = await super.createReceiverConnection(ev);

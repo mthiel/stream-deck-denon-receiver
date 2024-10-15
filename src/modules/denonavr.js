@@ -35,11 +35,17 @@ class DenonAVR {
 
 	eventEmitter = new EventEmitter();
 	statusMsg = "Initializing...";
-	actionIds;
+	actionIds = [];
+
+	/**
+	 * The raw socket connection to the receiver
+	 * @type {net.Socket | undefined}
+	 */
+	#rawSocket;
 
 	/**
 	 * The telnet socket connection to the receiver
-	 * @type {TelnetSocket}
+	 * @type {TelnetSocket | undefined}
 	 */
 	#telnet;
 
@@ -65,7 +71,7 @@ class DenonAVR {
 	 * @param {string} config.host - The host to connect to
 	 * @param {string} config.actionId - The action ID requesting this connection
 	 */
-	constructor(config = {}) {
+	constructor(config) {
 		let { host, actionId } = config;
 
 		this.#host = host;
@@ -133,7 +139,7 @@ class DenonAVR {
 		socket.on("message", (message, rinfo) => {
 			addresses.push(rinfo.address);
 		});
-		socket.bind(null);
+		socket.bind();
 
 		await setTimeout(1000);
 		socket.close();
@@ -163,6 +169,7 @@ class DenonAVR {
 		telnet.on("data", (data) => this.#onData(data));
 
 		// Assign the telnet socket to the instance
+		this.#rawSocket = rawSocket;
 		this.#telnet = telnet;
 	}
 
@@ -170,34 +177,41 @@ class DenonAVR {
 	 * Disconnect from the receiver and remove it from the pool
 	 */
 	disconnect() {
+		let rawSocket = this.#rawSocket;
 		let telnet = this.#telnet;
 
 		// Remove the instance from the pool
 		pool = pool.filter((instance) => instance !== this);
 
-		// Dispose of the telnet socket
-		this.#telnet = null;
+		// Dispose of this instance's sockets
+		this.#rawSocket = undefined;
+		this.#telnet = undefined;
 
-		if (telnet && !telnet.destroyed) {
+		if (telnet && !rawSocket?.destroyed) {
 			telnet.destroy();
 
-			// Set a timeout to clean up the socket
-			setTimeout(() => {
-				if (!telnet.destroyed) {
+			// Set a timeout to clean up the sockets
+			(async () => {
+				await setTimeout(1000);
+				if (!rawSocket?.destroyed && telnet) {
 					telnet.unref();
 				}
-			}, 1000);
+			})();
 		}
 	}
 
+	/**
+	 * Utility method to check if this receiver instance is currently connected
+	 * @returns {boolean} Whether the receiver is connected
+	 */
 	isConnected() {
-		return this.#telnet && !this.#telnet.destroyed;
+		return !!this.#telnet && !this.#rawSocket?.destroyed;
 	}
 
 	/**
 	 * Change the volume by the given delta
 	 * @param {number} delta - The amount to change the volume by
-	 * @returns {boolean} Whether the command was sent successfully
+	 * @returns {Promise<boolean>} Whether the command was sent successfully
 	 */
 	async changeVolume(delta) {
 		let telnet = this.#telnet;
@@ -229,7 +243,7 @@ class DenonAVR {
 	/**
 	 * Change the volume to the given value
 	 * @param {number} value - The new volume value to set
-	 * @returns {boolean} Whether the command was sent successfully
+	 * @returns {Promise<boolean>} Whether the command was sent successfully
 	 */
 	async changeVolumeByValue(value) {
 		let telnet = this.#telnet;
@@ -248,7 +262,7 @@ class DenonAVR {
 
 	/**
 	 * Toggle the mute state
-	 * @returns {boolean} Whether the command was sent successfully
+	 * @returns {Promise<boolean>} Whether the command was sent successfully
 	 */
 	async toggleMute() {
 		let telnet = this.#telnet;
@@ -268,7 +282,7 @@ class DenonAVR {
 
 	/**
 	 * Toggle the power state
-	 * @returns {boolean} Whether the command was sent successfully
+	 * @returns {Promise<boolean>} Whether the command was sent successfully
 	 */
 	async togglePower() {
 		let telnet = this.#telnet;
@@ -288,18 +302,18 @@ class DenonAVR {
 	 * Send an event to all actions subscribed to this receiver
 	 * Also performs subscriber maintenance tasks
 	 * @param {string} eventName - The name of the event to send
-	 * @param {ReceiverEvent} [ev] - The event object
 	 */
-	#broadcastEvent(eventName, ev) {
+	#broadcastEvent(eventName) {
 		let staleActionIds = [];
 
-		if (!ev) {
-			ev = {};
-		}
-
-		ev.receiver = this;
-
+		/** @type {ReceiverEvent} */
+		let ev = { 
+			receiver: this,
+			action: undefined
+		};
+	
 		// Broadcast the event to all actions and collect any stale action IDs
+		// TODO: Rework this to avoid event storms
 		this.actionIds.forEach((id) => {
 			delete ev.action;
 
@@ -353,11 +367,12 @@ class DenonAVR {
 		if (this.#telnet && this.#reconnectCount < 10) {
 			this.#reconnectCount++;
 
-			setTimeout(() => {
-				streamDeck.logger.info(`Reconnecting to Denon receiver: ${this.#id}. Attempt ${this.#reconnectCount}`);
+			(async () => {
+				await setTimeout(1000);
+				streamDeck.logger.info(`Trying to reconnect to Denon receiver: ${this.#id}. Attempt ${this.#reconnectCount}`);
 
 				this.connect();
-			}, 1000);
+			})();
 		}
 	}
 
@@ -435,7 +450,7 @@ class DenonAVR {
 
 	/**
 	 * Handle socket errors
-	 * @param {Error} error
+	 * @param {Object} error
 	 */
 	#onError(error) {
 		if (error.code === "ENOTFOUND") {
@@ -460,10 +475,4 @@ class DenonAVR {
 	}
 }
 
-/**
- * @typedef {import('./denonavr').ReceiverEvent} ReceiverEvent
- */
-
 export { DenonAVR };
-
-/** @typedef {ReceiverEvent} ReceiverEvent */
