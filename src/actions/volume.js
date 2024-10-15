@@ -46,6 +46,13 @@ class VolumeAction extends PluginAction {
 		receiver.toggleMute() || ev.action.showAlert();
 	}
 
+	onKeyDown(ev) {
+		let receiver = DenonAVR.getByContext(ev.action.id);
+		if (!receiver) return;
+
+		receiver.changeVolumeByValue(ev.payload.settings.volumeLevel) || ev.action.showAlert();
+	}
+
     /**
 	 * Create a new receiver connection.
 	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
@@ -69,12 +76,14 @@ class VolumeAction extends PluginAction {
 			return;
 		}
 
-		ev.action.setFeedback({
-			indicator: {
-				value: (ev.receiver.volume / ev.receiver.maxVolume) * 100
-			},
-			value: `Vol: ${ev.receiver.volume}`
-		});
+		if (ev.action.controllerType === "Encoder") {
+			ev.action.setFeedback({
+				indicator: {
+					value: (ev.receiver.volume / ev.receiver.maxVolume) * 100
+				},
+				value: `Vol: ${ev.receiver.volume}`
+			});
+		}
 	}
 
 	/**
@@ -86,21 +95,23 @@ class VolumeAction extends PluginAction {
 			return;
 		}
 
-		if (ev.receiver.muted) {
-			ev.action.setFeedback({
-				value: "Muted",
-				indicator: {
-					value: 0
-				}
-			});
-			ev.action.setFeedback({
-				icon: images.muted
-			});
-		} else {
-			ev.action.setFeedback({
-				icon: images.unmuted
-			});
-			this.#onReceiverVolumeChanged(ev);
+		if (ev.action.controllerType === "Encoder") {
+			if (ev.receiver.muted) {
+				ev.action.setFeedback({
+					value: "Muted",
+					indicator: {
+						value: 0
+					}
+				});
+				ev.action.setFeedback({
+					icon: images.muted
+				});
+			} else {
+				ev.action.setFeedback({
+					icon: images.unmuted
+				});
+				this.#onReceiverVolumeChanged(ev);
+			}
 		}
 	}
 }

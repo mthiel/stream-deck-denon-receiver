@@ -73,6 +73,7 @@ class PluginAction extends SingletonAction {
 	 * @param {WillAppearEvent} ev - The event object.
 	 */
 	onWillAppear(ev) {
+		streamDeck.logger.info(`onWillAppear for action id: ${ev.action.id}`);
 		if (ev.payload.settings.autoConnect) {
 			this.createReceiverConnection(ev);
 		}
@@ -128,6 +129,11 @@ class PluginAction extends SingletonAction {
 
 		streamDeck.logger.info(`Creating new receiver connection: ${settings.host}.`);
 		receiver = new DenonAVR({ host: settings.host, actionId: action.id });
+
+		if (receiver.isConnected()) {
+			// If this receiver connection was already established, tag this action to auto-connect onWillAppear
+			settings.autoConnect = true;
+		}
 
 		settings.statusMsg = receiver.statusMsg;
 		action.setSettings(settings);

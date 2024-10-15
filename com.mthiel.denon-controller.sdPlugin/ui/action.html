@@ -25,8 +25,14 @@
 		<sdpi-button id="connectBtn" onclick="connect(this)">Save & Connect</sdpi-button>
 	</sdpi-item>
 	<sdpi-item label="Status">
-		<sdpi-textarea id="statusMsg" setting="statusMsg" disabled></sdpi-textarea>
+		<sdpi-textfield id="statusMsg" setting="statusMsg" disabled></sdpi-textfield>
 	</sdpi-item>
+	<hr id="moreSettingsDivider" style="display: none;" />
+	<sdpi-item label="Volume level" id="volumeLevel" style="display: none;">
+		<sdpi-textfield setting="volumeLevel"></sdpi-textfield>
+	</sdpi-item>
+
+	<div id="debugMessage" style="color: white; display: none;"></div>
 
 	<script>
 		const { streamDeckClient } = SDPIComponents;
@@ -47,8 +53,11 @@
 		}
 
 		async function updateLayoutForAction() {
-			let actionIdArray = (await streamDeckClient.getConnectionInfo()).actionInfo.action.split(".");
-			let actionId = actionIdArray[actionIdArray.length - 1];
+			const connectionInfo = await streamDeckClient.getConnectionInfo();
+			const controller = connectionInfo.actionInfo.payload.controller;
+			const actionIdArray = connectionInfo.actionInfo.action.split(".");
+			const actionId = actionIdArray[actionIdArray.length - 1];
+			// document.getElementById('debugMessage').innerText = "DEBUG: " + JSON.stringify(controller);
 
 			switch (actionId) {
 				case "power":
@@ -56,6 +65,10 @@
 					break;
 				case "volume":
 					document.title = "Denon Controller - Volume";
+					if (controller === "Keypad") {
+						document.getElementById('moreSettingsDivider').style.removeProperty('display');
+						document.getElementById('volumeLevel').style.removeProperty('display');
+					}
 					break;
 				case "source":
 					document.title = "Denon Controller - Source";
@@ -67,7 +80,7 @@
 
 		// Ensure the connect button is updated after the page loads
 		setTimeout(() => {
-			updateConnectButton();
+			updateElements();
 			updateLayoutForAction();
 		}, 1);
 	</script>

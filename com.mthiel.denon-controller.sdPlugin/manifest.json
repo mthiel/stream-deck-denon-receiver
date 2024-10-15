@@ -9,7 +9,8 @@
 			"Icon": "imgs/actions/volume/volume2",
 			"Tooltip": "Displays the current volume and allows for adjustment.",
 			"PropertyInspectorPath": "ui/action.html",
-			"Controllers": [ "Encoder" ],
+			"Controllers": [ "Keypad", "Encoder" ],
+			"DisableAutomaticStates": true,
 			"Encoder": {
 				"layout": "$B1",
 				"TriggerDescription": {

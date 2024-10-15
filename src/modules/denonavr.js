@@ -190,6 +190,10 @@ class DenonAVR {
 		}
 	}
 
+	isConnected() {
+		return this.#telnet && !this.#telnet.destroyed;
+	}
+
 	/**
 	 * Change the volume by the given delta
 	 * @param {number} delta - The amount to change the volume by
@@ -218,6 +222,27 @@ class DenonAVR {
 		} catch (error) {
 			return false;
 		}
+
+		return true;
+	}
+
+	/**
+	 * Change the volume to the given value
+	 * @param {number} value - The new volume value to set
+	 * @returns {boolean} Whether the command was sent successfully
+	 */
+	async changeVolumeByValue(value) {
+		let telnet = this.#telnet;
+		if (!telnet || !this.power) return false;
+
+		try {
+			let command = `MV${value.toString().padStart(2, "0")}`;
+			telnet.write(command + "\r");
+			streamDeck.logger.debug(`Sent volume command: ${command}`);
+		} catch (error) {
+			return false;
+		}
+
 		return true;
 	}
 
