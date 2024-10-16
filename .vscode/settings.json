@@ -13,5 +13,6 @@
 			],
 			"url": "https://schemas.elgato.com/streamdeck/plugins/layout.json"
 		}
-	]
+	],
+	"js/ts.implicitProjectConfig.checkJs": true
 }
