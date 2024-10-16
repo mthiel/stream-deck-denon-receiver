@@ -9,21 +9,23 @@
 
 <body>
 	<sdpi-item label="Receiver">
-		<sdpi-select id="detectedReceiver" setting="detectedReceiver" datasource="getDetectedReceivers"
-			loading="Searching for receivers...">
+		<sdpi-select id="receiverSelect" setting="host" label-setting="name" datasource="getReceiversOnNetwork"
+			loading="Searching for receivers..." oninput="userChoseReceiver()">
 		</sdpi-select>
 	</sdpi-item>
+	<!-- NOTE: May re-use these later for manual entry of receiver details -->
+	<!--
+	<sdpi-item label="Name">
+		<sdpi-textfield id="name" setting="name" placeholder="Living Room"></sdpi-textfield>
+	</sdpi-item>
 	<sdpi-item label="Host">
-		<!-- TODO: Add hostname validation -->
-		<sdpi-textfield id="host" setting="host" required placeholder="receiver.local"
+		<sdpi-textfield id="host" setting="host" required placeholder="192.168.10.100"
 			oninput="updateConnectButton()"></sdpi-textfield>
 	</sdpi-item>
-	<sdpi-item label="Auto Connect" style="display: none;">
-		<sdpi-checkbox id="autoConnect" setting="autoConnect"></sdpi-checkbox>
-	</sdpi-item>
 	<sdpi-item>
-		<sdpi-button id="connectBtn" onclick="connect(this)">Save & Connect</sdpi-button>
+		<sdpi-button id="connectBtn" onclick="connect()">Connect</sdpi-button>
 	</sdpi-item>
+	-->
 	<sdpi-item label="Status">
 		<sdpi-textfield id="statusMsg" setting="statusMsg" disabled></sdpi-textfield>
 	</sdpi-item>
@@ -37,20 +39,32 @@
 	<script>
 		const { streamDeckClient } = SDPIComponents;
 
-		function updateElements() {
-			const host = document.getElementById('host');
-			const connectBtn = document.getElementById('connectBtn');
-			const detectedReceiver = document.getElementById('detectedReceiver');
+		// function updateElements() {
+		// 	const receiverSelect = document.getElementById('receiverSelect');
+		// 	const connectBtn = document.getElementById('connectBtn');
+		// 	const detectedReceiver = document.getElementById('detectedReceiver');
 
-			host.disabled = !!detectedReceiver.value;
-			connectBtn.disabled = !host.value;
+		// 	host.disabled = !!detectedReceiver.value;
+		// 	connectBtn.disabled = !host.value;
+		// }
+
+		/**
+		 * Use the selected detected receiver.
+		 * @param {HTMLSelectElement} el - The select element.
+		 */
+		async function userChoseReceiver() {
+			const receiverSelect = document.getElementById('receiverSelect');
+			receiverSelect.disabled = true;
+			await streamDeckClient.send('sendToPlugin', { event: 'userChoseReceiver' });
+			receiverSelect.disabled = false;
 		}
 
-		async function connect(el) {
-			el.disabled = true;
-			await streamDeckClient.send('sendToPlugin', { event: 'connect' });
-			el.disabled = false;
-		}
+		// async function connect() {
+		// 	const connectBtn = document.getElementById('connectBtn');
+		// 	connectBtn.disabled = true;
+		// 	await streamDeckClient.send('sendToPlugin', { event: 'connect' });
+		// 	updateElements();
+		// }
 
 		async function updateLayoutForAction() {
 			const connectionInfo = await streamDeckClient.getConnectionInfo();
@@ -76,11 +90,11 @@
 			}
 		}
 
-		streamDeckClient.didReceiveSettings.subscribe(updateElements);
+		// streamDeckClient.didReceiveSettings.subscribe(updateElements);
 
 		// Ensure the connect button is updated after the page loads
 		setTimeout(() => {
-			updateElements();
+			// updateElements();
 			updateLayoutForAction();
 		}, 1);
 	</script>

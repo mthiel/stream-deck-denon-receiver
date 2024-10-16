@@ -1,13 +1,10 @@
 import streamDeck, { action } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").KeyDownEvent} KeyDownEvent */
-/** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
-/** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
 import { PluginAction } from "./action";
-/** @typedef {import('./action').ActionSettings} ActionSettings */
+/** @typedef {import("./action").VisibleAction} VisibleAction */
 
-import { DenonAVR } from "../modules/denonavr";
-/** @typedef {import("../modules/denonavr").ReceiverEvent} ReceiverEvent */
+/** @typedef {import("../modules/denonavr").DenonAVR} DenonAVR */
 
 /**
  * The Power action class.
@@ -17,37 +14,37 @@ import { DenonAVR } from "../modules/denonavr";
 class PowerAction extends PluginAction {
 	/**
 	 * Toggle the power state when the key is pressed
+	 * @todo Make options for explicit on/off vs. toggle
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
-		let receiver = DenonAVR.getByContext(ev.action.id);
-		if (!receiver) return;
-		receiver.togglePower() || ev.action.showAlert();		
+		this.getReceiverForAction(ev.action)
+		.then((receiver) => {
+			if (!receiver) {
+				ev.action.showAlert();
+				return;
+			}
+
+			if (!receiver?.togglePower()) {
+				ev.action.showAlert();
+				}
+			});
 	}
 
-    /**
-	 * Create a new receiver connection.
-	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-     * @returns {Promise<DenonAVR | undefined>} The newly created receiver object.
-	 */
-	async createReceiverConnection(ev) {
-		let receiver = await super.createReceiverConnection(ev);
-		if (!receiver) return;
-
-		receiver.eventEmitter.on("powerChanged", (ev) => this.#onReceiverPowerChanged(ev));
-		return receiver;
-	}
-
-    /**
+	/**
 	 * Handle a receiver power changing.
-	 * @param {ReceiverEvent} ev - The event object.
+	 * @override
+	 * @param {DenonAVR} receiver - The receiver object.
 	 */
-	#onReceiverPowerChanged(ev) {
-		if (ev.action.manifestId !== this.manifestId) {
-			return;
-		}
-
-		ev.action.setState(ev.receiver.power ? 0 : 1);
+	onReceiverPowerChanged(receiver) {
+		PluginAction.visibleActions
+			.filter((visibleAction) => visibleAction.host === receiver.host)
+			.forEach((visibleAction) => {
+				const action = streamDeck.actions.getActionById(visibleAction.id);
+				if (action?.isKey()) {
+					action.setState(receiver.power ? 0 : 1);
+				}
+			});
 	}
 }
 

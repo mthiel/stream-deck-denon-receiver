@@ -5,10 +5,8 @@ import streamDeck, { action } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").DialDownEvent} DialDownEvent */
 
 import { PluginAction } from "./action";
-/** @typedef {import('./action').ActionSettings} ActionSettings */
 
 import { DenonAVR } from "../modules/denonavr";
-/** @typedef {import("../modules/denonavr").ReceiverEvent} ReceiverEvent */
 
 const images = {
 	unmuted: "imgs/actions/volume/volume2",
@@ -26,9 +24,12 @@ class VolumeAction extends PluginAction {
 	 * @param {DialRotateEvent} ev - The event object.
 	 */
 	onDialRotate(ev) {
-		let receiver = DenonAVR.getByContext(ev.action.id);
-		if (!receiver) return;
-		receiver.changeVolume(ev.payload.ticks) || ev.action.showAlert();
+		this.getReceiverForAction(ev.action)
+		.then((receiver) => {
+			if (!(receiver && receiver.changeVolume(ev.payload.ticks))) {
+				ev.action.showAlert();
+			}
+		});
 	}
 
 	/**
@@ -36,78 +37,77 @@ class VolumeAction extends PluginAction {
 	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
-		let receiver = DenonAVR.getByContext(ev.action.id);
-		if (!receiver) return;
-		receiver.toggleMute() || ev.action.showAlert();
+		this.getReceiverForAction(ev.action)
+		.then((receiver) => {
+			if (!(receiver && receiver.toggleMute())) {
+				ev.action.showAlert();
+			}
+		});
 	}
 
 	onKeyDown(ev) {
-		let receiver = DenonAVR.getByContext(ev.action.id);
-		if (!receiver) return;
-
-		receiver.changeVolumeByValue(ev.payload.settings.volumeLevel) || ev.action.showAlert();
-	}
-
-    /**
-	 * Create a new receiver connection.
-	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-     * @returns {Promise<DenonAVR | undefined>} The newly created receiver object.
-	 */
-	async createReceiverConnection(ev) {
-		let receiver = await super.createReceiverConnection(ev);
-		if (!receiver) return;
-
-		receiver.eventEmitter.on("volumeChanged", (ev) => this.#onReceiverVolumeChanged(ev));
-		receiver.eventEmitter.on("muteChanged", (ev) => this.#onReceiverMuteChanged(ev));
-		return receiver;
+		this.getReceiverForAction(ev.action)
+		.then((receiver) => {
+			if (!(receiver && receiver.changeVolumeAbsolute(ev.payload.settings.volumeLevel))) {
+				ev.action.showAlert();
+			}
+		});
 	}
 
 	/**
 	 * Handle a receiver volume changing.
-	 * @param {ReceiverEvent} ev - The event object.
+	 * @param {DenonAVR} receiver - The receiver object.
 	 */
-	#onReceiverVolumeChanged(ev) {
-		if (ev.action.manifestId !== this.manifestId) {
-			return;
-		}
-
-		if (ev.action.controllerType === "Encoder") {
-			ev.action.setFeedback({
-				indicator: {
-					value: (ev.receiver.volume / ev.receiver.maxVolume) * 100
-				},
-				value: `Vol: ${ev.receiver.volume}`
+	onReceiverVolumeChanged(receiver) {
+		PluginAction.visibleActions
+			.filter((visibleAction) => visibleAction.host === receiver.host)
+			.forEach((visibleAction) => {
+				const action = streamDeck.actions.getActionById(visibleAction.id);
+				if (action?.isDial()) {
+					action.setFeedback({
+						indicator: {
+							value: (receiver.volume / receiver.maxVolume) * 100
+						},
+						value: `Vol: ${receiver.volume}`
+					});
+				}
 			});
-		}
+
 	}
 
 	/**
 	 * Handle a receiver mute changing.
-	 * @param {ReceiverEvent} ev - The event object.
+	 * @param {DenonAVR} receiver - The receiver object.
 	 */
-	#onReceiverMuteChanged(ev) {
-		if (ev.action.manifestId !== this.manifestId) {
-			return;
-		}
-
-		if (ev.action.controllerType === "Encoder") {
-			if (ev.receiver.muted) {
-				ev.action.setFeedback({
-					value: "Muted",
-					indicator: {
-						value: 0
+	onReceiverMuteChanged(receiver) {
+		PluginAction.visibleActions
+			.filter((visibleAction) => visibleAction.host === receiver.host)
+			.forEach((visibleAction) => {
+				const action = streamDeck.actions.getActionById(visibleAction.id);
+				if (action?.isDial()) {
+					if (receiver.muted) {
+						action.setFeedback({
+							value: "Muted",
+							indicator: {
+								value: 0
+							}
+						});
+						action.setFeedback({
+							icon: images.muted
+						});
+					} else {
+						action.setFeedback({
+							indicator: {
+								value: (receiver.volume / receiver.maxVolume) * 100
+							},
+							value: `Vol: ${receiver.volume}`
+						});
+						action.setFeedback({
+							icon: images.unmuted
+						});
 					}
-				});
-				ev.action.setFeedback({
-					icon: images.muted
-				});
-			} else {
-				ev.action.setFeedback({
-					icon: images.unmuted
-				});
-				this.#onReceiverVolumeChanged(ev);
-			}
-		}
+				}
+			});
 	}
 }
 

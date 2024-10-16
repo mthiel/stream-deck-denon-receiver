@@ -48,7 +48,7 @@
 	"Category": "Receiver Control",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
-	"Description": "Uses the network interface on many Denon/Marantz receivers to control basic functions.",
+	"Description": "Uses the network interface on many Denon/Marantz receivers to control basic functions. Requires a receiver with HEOS support.",
 	"Icon": "imgs/plugin/marketplace",
 	"SDKVersion": 2,
 	"Software": {

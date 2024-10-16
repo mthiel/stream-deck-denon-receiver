@@ -6,36 +6,44 @@ import { setTimeout } from "timers/promises";
 import streamDeck from "@elgato/streamdeck";
 
 /**
- * @typedef {Object} ReceiverEvent
- * @property {DenonAVR} receiver - The receiver instance
- * @property {Object} action - The action instance to send the event to
- */
-
-/**
- * Pool of active DenonAVR instances
- * @type {DenonAVR[]}
- */
-let pool = [];
-
-/**
  * Represents a connection to a Denon AVR receiver
- * @property {string} id - The unique identifier for the receiver
- * @property {boolean} power - Whether the receiver is powered on
- * @property {number} maxVolume - The maximum volume of the receiver
- * @property {number} volume - The current volume of the receiver
- * @property {boolean} muted - Whether the receiver is muted
- * @property {EventEmitter} eventEmitter - The event emitter for this instance
- * @property {string[]} actionIds - The action IDs associated with this receiver connection
  */
 class DenonAVR {
+	/**
+	 * Whether the receiver is powered on
+	 * @type {boolean}
+	 */
 	power;
+
+	/**
+	 * The maximum volume of the receiver
+	 * @type {number}
+	 */
 	maxVolume = 85;
+
+	/**
+	 * The current volume of the receiver
+	 * @type {number}
+	 */
 	volume;
+
+	/**
+	 * Whether the receiver is muted
+	 * @type {boolean}
+	 */
 	muted;
 
-	eventEmitter = new EventEmitter();
+	/**
+	 * The event emitter for this instance
+	 * @type {EventEmitter}
+	 */
+	#eventEmitter = new EventEmitter();
+
+	/**
+	 * The status message for this instance
+	 * @type {string}
+	 */
 	statusMsg = "Initializing...";
-	actionIds = [];
 
 	/**
 	 * The raw socket connection to the receiver
@@ -56,70 +64,43 @@ class DenonAVR {
 	#reconnectCount = 0;
 
 	/**
-	 * The unique identifier for the receiver
+	 * The host address of the receiver and the ID for this instance
 	 * @type {string}
 	 */
-	#id;
-	get id() { return this.#id; }
-
 	#host;
 	get host() { return this.#host; }
 
 	/**
-	 * Create a new DenonAVR instance
-	 * @param {object} config - The configuration object
-	 * @param {string} config.host - The host to connect to
-	 * @param {string} config.actionId - The action ID requesting this connection
+	 * The display name of the receiver
+	 * @type {string}
 	 */
-	constructor(config) {
-		let { host, actionId } = config;
+	name;
 
+	/**
+	 * Create a new DenonAVR instance
+	 * @param {string} host - The host to connect to
+	 * @param {string} [name] - The display name of the receiver
+	 */
+	constructor(host, name = host) {
 		this.#host = host;
-		this.#id = `${host}`;
-
-		// Check if the instance already exists and reuse it
-		let instance = pool.find((instance) => instance.id == this.#id);
-		if (instance) {
-			streamDeck.logger.debug(`Reusing existing DenonAVR instance: ${this.#id}`);
-
-			let existingActionInstance = DenonAVR.getByContext(actionId);
-			if (existingActionInstance && existingActionInstance !== instance) {
-				// Remove the action context from the old instance
-				existingActionInstance.actionIds = existingActionInstance.actionIds.filter((id) => id !== actionId);
-			}
-
-			// Add the action context to the new instance
-			if (instance.actionIds.indexOf(actionId) === -1) {
-				instance.actionIds.push(actionId);
-			}
-
-			return instance;
-		}
-
-		// Initialize this instance with a first action context
-		this.actionIds = [actionId];
-
+		this.name = name;
 		this.connect();
-
-		// Add the instance to the pool
-		pool.push(this);
 	}
 
 	/**
-	 * Get an instance by an action ID
-	 * @param {string} actionId - The action ID
-	 * @returns {DenonAVR | undefined} The instance or undefined if not found
+	 * @typedef {Object} ReceiverInfo
+	 * @property {string} name - The name of the receiver
+	 * @property {string} address - The IP address of the receiver
 	 */
-	static getByContext(actionId) {
-		return pool.find((instance) => instance.actionIds.indexOf(actionId) !== -1);
-	}
 
 	/**
 	 * Get a list of detected receivers on the network
-	 * @returns {Promise<string[]>} A promise that resolves to an array of detected receiver addresses
+	 * TODO: Rework this to stream the results as they come in
+	 * @returns {Promise<ReceiverInfo[]>} A promise that resolves to an array of detected receivers
 	 */
-	static async getDetectedReceiverAddresses() {
-		let addresses = [];
+	static async findReceiversOnNetwork() {
+		/** @type {ReceiverInfo[]} */
+		let receivers = [];
 
 		const socket = dgram.createSocket("udp4");
 		socket.on("listening", () => {
@@ -137,14 +118,40 @@ class DenonAVR {
 			streamDeck.logger.debug(`Sent SSDP M-SEARCH message for Denon receivers`);
 		});
 		socket.on("message", (message, rinfo) => {
-			addresses.push(rinfo.address);
+			receivers.push({ name: "", address: rinfo.address });
 		});
 		socket.bind();
 
 		await setTimeout(1000);
 		socket.close();
 
-		return addresses;
+		/** @todo Add support for retrieving details from the HEOS API */
+		/*
+			heos://player/get_players
+
+			Response:
+			{
+				"heos": {
+					"command": "player/get_players",
+					"result": "success",
+					"message": ""
+				},
+				"payload": [
+					{
+						"name": "Studio-Receiver",
+						"pid": 762148930,
+						"model": "Denon AVR-S760H",
+						"version": "3.34.410",
+						"ip": "192.168.0.43",
+						"network": "wired",
+						"lineout": 0,
+						"serial": "DBNX102320681"
+					}
+				]
+			}
+		*/
+
+		return receivers;
 	}
 
 	/**
@@ -174,46 +181,35 @@ class DenonAVR {
 	}
 
 	/**
-	 * Disconnect from the receiver and remove it from the pool
+	 * Disconnect from the receiver and clean up resources
 	 */
 	disconnect() {
 		let rawSocket = this.#rawSocket;
 		let telnet = this.#telnet;
 
-		// Remove the instance from the pool
-		pool = pool.filter((instance) => instance !== this);
-
 		// Dispose of this instance's sockets
 		this.#rawSocket = undefined;
 		this.#telnet = undefined;
 
-		if (telnet && !rawSocket?.destroyed) {
+		if (telnet && rawSocket?.destroyed !== true) {
 			telnet.destroy();
 
 			// Set a timeout to clean up the sockets
-			(async () => {
-				await setTimeout(1000);
-				if (!rawSocket?.destroyed && telnet) {
+			setTimeout(1000).then(() => {
+				if (telnet && rawSocket?.destroyed !== true) {
 					telnet.unref();
+					rawSocket?.unref();
 				}
-			})();
+			});
 		}
-	}
-
-	/**
-	 * Utility method to check if this receiver instance is currently connected
-	 * @returns {boolean} Whether the receiver is connected
-	 */
-	isConnected() {
-		return !!this.#telnet && !this.#rawSocket?.destroyed;
 	}
 
 	/**
 	 * Change the volume by the given delta
 	 * @param {number} delta - The amount to change the volume by
-	 * @returns {Promise<boolean>} Whether the command was sent successfully
+	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	async changeVolume(delta) {
+	changeVolume(delta) {
 		let telnet = this.#telnet;
 		if (!telnet || !this.power || this.volume === undefined) return false;
 
@@ -234,6 +230,7 @@ class DenonAVR {
 			telnet.write(command + "\r");
 			streamDeck.logger.debug(`Sent volume command: ${command}`);
 		} catch (error) {
+			streamDeck.logger.error(`Error sending volume command: ${error.message}`);
 			return false;
 		}
 
@@ -243,9 +240,9 @@ class DenonAVR {
 	/**
 	 * Change the volume to the given value
 	 * @param {number} value - The new volume value to set
-	 * @returns {Promise<boolean>} Whether the command was sent successfully
+	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	async changeVolumeByValue(value) {
+	changeVolumeAbsolute(value) {
 		let telnet = this.#telnet;
 		if (!telnet || !this.power) return false;
 
@@ -254,6 +251,7 @@ class DenonAVR {
 			telnet.write(command + "\r");
 			streamDeck.logger.debug(`Sent volume command: ${command}`);
 		} catch (error) {
+			streamDeck.logger.error(`Error sending volume command: ${error.message}`);
 			return false;
 		}
 
@@ -262,9 +260,9 @@ class DenonAVR {
 
 	/**
 	 * Toggle the mute state
-	 * @returns {Promise<boolean>} Whether the command was sent successfully
+	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	async toggleMute() {
+	toggleMute() {
 		let telnet = this.#telnet;
 		if (!telnet || !this.power || this.muted === undefined) return false;
 
@@ -274,6 +272,7 @@ class DenonAVR {
 			telnet.write(command + "\r");
 			streamDeck.logger.debug(`Sent mute command: ${command}`);
 		} catch (error) {
+			streamDeck.logger.error(`Error sending mute command: ${error.message}`);
 			return false;
 		}
 
@@ -282,9 +281,9 @@ class DenonAVR {
 
 	/**
 	 * Toggle the power state
-	 * @returns {Promise<boolean>} Whether the command was sent successfully
+	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	async togglePower() {
+	togglePower() {
 		let telnet = this.#telnet;
 		if (!telnet) return false;
 
@@ -293,86 +292,54 @@ class DenonAVR {
 			telnet.write(command + "\r");
 			streamDeck.logger.debug(`Sent power command: ${command}`);
 		} catch (error) {
+			streamDeck.logger.error(`Error sending power command: ${error.message}`);
 			return false;
 		}
 		return true;
 	}
 
+	/** @typedef {(...args: any[]) => void} EventListener */
+
 	/**
-	 * Send an event to all actions subscribed to this receiver
-	 * Also performs subscriber maintenance tasks
-	 * @param {string} eventName - The name of the event to send
+	 * Subscribe to an event from this receiver
+	 * @param {string} eventName - The name of the event to subscribe to
+	 * @param {EventListener} listener - The listener function to call when the event is emitted
 	 */
-	#broadcastEvent(eventName) {
-		let staleActionIds = [];
-
-		/** @type {ReceiverEvent} */
-		let ev = { 
-			receiver: this,
-			action: undefined
-		};
-	
-		// Broadcast the event to all actions and collect any stale action IDs
-		// TODO: Rework this to avoid event storms
-		this.actionIds.forEach((id) => {
-			delete ev.action;
-
-			let action = streamDeck.actions.getActionById(id);
-			if (action) {
-				ev.action = action;
-				this.eventEmitter.emit(eventName, ev);
-			} else {
-				staleActionIds.push(id);
-			}
-		});
-
-		// Remove any stale action subscriptions
-		staleActionIds.forEach((staleId) => {
-			streamDeck.logger.debug(`Removing stale action subscription: ${staleId}`);
-			this.actionIds = this.actionIds.filter((id) => id !== staleId);
-		});
-
-		// If there are no more actions subscribed to this receiver, disconnect
-		if (this.actionIds.length === 0 && this.#telnet) {
-			streamDeck.logger.debug(`No actions subscribed to receiver ${this.#id}, disconnecting`);
-			this.disconnect();
-		}
+	on(eventName, listener) {
+		this.#eventEmitter.on(eventName, listener);
 	}
 
 	/**
 	 * Handle connection events
 	 */
 	#onConnect() {
-		streamDeck.logger.info("Telnet connection established to Denon receiver.");
+		streamDeck.logger.debug(`Telnet connection established to Denon receiver at ${this.#host}`);
 
 		this.#reconnectCount = 0;
 		this.statusMsg = "Connected.";
 
-		this.#broadcastEvent("connected");
+		this.#eventEmitter.emit("connected", this);
 
-		this.#requestStatus();
+		this.#requestFullReceiverStatus();
 	}
 
 	/**
 	 * Handle connection closing event
-	 * Note: Logging in this state causes errors, so we hand it off to the actions to handle.
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
-		streamDeck.logger.warn(`Telnet connection to Denon receiver closed${hadError ? " due to error" : ""}.`);
+		(hadError ? streamDeck.logger.warn : streamDeck.logger.debug)(`Telnet connection to Denon receiver at ${this.#host} closed${hadError ? " due to error" : ""}.`);
 
-		this.#broadcastEvent("closed");
+		this.#eventEmitter.emit("closed", this);
 
 		// Attempt to reconnect if we haven't given up yet
 		if (this.#telnet && this.#reconnectCount < 10) {
 			this.#reconnectCount++;
 
-			(async () => {
-				await setTimeout(1000);
-				streamDeck.logger.info(`Trying to reconnect to Denon receiver: ${this.#id}. Attempt ${this.#reconnectCount}`);
-
+			setTimeout(1000).then(() => {
+				streamDeck.logger.debug(`Trying to reconnect to Denon receiver at ${this.#host}. Attempt ${this.#reconnectCount}`);
 				this.connect();
-			})();
+			});
 		}
 	}
 
@@ -399,7 +366,7 @@ class DenonAVR {
 					this.#onMuteChanged(parameter);
 					break;
 				default:
-					streamDeck.logger.warn(`Unhandled message from receiver: ${line}`);
+					streamDeck.logger.warn(`Unhandled message from receiver at ${this.#host}: ${line}`);
 					break;
 			}
 		}
@@ -407,9 +374,9 @@ class DenonAVR {
 
 	#onPowerChanged(parameter) {
 		this.power = parameter == "ON";
-		streamDeck.logger.debug(`Updated receiver power status: ${this.power}`);
+		streamDeck.logger.debug(`Updated receiver power status for ${this.#host}: ${this.power}`);
 
-		this.#broadcastEvent("powerChanged");
+		this.#eventEmitter.emit("powerChanged", this);
 	}
 
 	#onVolumeChanged(parameter) {
@@ -425,9 +392,9 @@ class DenonAVR {
 			}
 
 			this.maxVolume = newMaxVolume;
-			streamDeck.logger.debug(`Updated receiver max volume: ${this.maxVolume}`);
+			streamDeck.logger.debug(`Updated receiver max volume for ${this.#host}: ${this.maxVolume}`);
 
-			this.#broadcastEvent("maxVolumeChanged");
+			this.#eventEmitter.emit("maxVolumeChanged", this);
 		} else {
 			let newVolume = parseInt(parameter);
 			if (parameter.length === 3) {
@@ -435,17 +402,17 @@ class DenonAVR {
 			}
 
 			this.volume = newVolume;
-			streamDeck.logger.debug(`Updated receiver volume to: ${this.volume}`);
+			streamDeck.logger.debug(`Updated receiver volume for ${this.#host}: ${this.volume}`);
 
-			this.#broadcastEvent("volumeChanged");
+			this.#eventEmitter.emit("volumeChanged", this);
 		}
 	}
 
 	#onMuteChanged(parameter) {
 		this.muted = parameter == "ON";
-		streamDeck.logger.debug(`Updated receiver mute status: ${this.muted}`);
+		streamDeck.logger.debug(`Updated receiver mute status for ${this.#host}: ${this.muted}`);
 
-		this.#broadcastEvent("muteChanged");
+		this.#eventEmitter.emit("muteChanged", this);
 	}
 
 	/**
@@ -462,11 +429,15 @@ class DenonAVR {
 		}
 
 		streamDeck.logger.warn(this.statusMsg);
-		this.#broadcastEvent("status");
+		this.#eventEmitter.emit("status", this);
 	}
 
-	#requestStatus() {
-		let telnet = this.#telnet;
+	/**
+	 * Request the full status of the receiver
+	 * Usually only needed when the connection is first established
+	 */
+	#requestFullReceiverStatus() {
+		const telnet = this.#telnet;
 		if (!telnet) return;
 
 		telnet.write("PW?\r"); // Request the power status
