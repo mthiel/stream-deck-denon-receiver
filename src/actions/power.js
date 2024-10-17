@@ -14,10 +14,10 @@ import { PluginAction } from "./action";
 class PowerAction extends PluginAction {
 	/**
 	 * Toggle the power state when the key is pressed
-	 * @todo Make options for explicit on/off vs. toggle
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
+		// TODO: Make options for explicit on/off vs. toggle
 		this.getReceiverForAction(ev.action)
 		.then((receiver) => {
 			if (!receiver) {

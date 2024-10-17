@@ -9,8 +9,8 @@
 
 <body>
 	<sdpi-item label="Receiver">
-		<sdpi-select id="receiverSelect" setting="host" label-setting="name" datasource="getReceiversOnNetwork"
-			loading="Searching for receivers..." oninput="userChoseReceiver()">
+		<sdpi-select id="receiverSelect" setting="host" label-setting="name" datasource="getDiscoveredReceivers"
+			loading="Searching for receivers..." hot-reload="true" oninput="userChoseReceiver()">
 		</sdpi-select>
 	</sdpi-item>
 	<!-- NOTE: May re-use these later for manual entry of receiver details -->

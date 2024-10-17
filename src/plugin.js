@@ -1,4 +1,6 @@
-import streamDeck from "@elgato/streamdeck";
+import streamDeck, { LogLevel } from "@elgato/streamdeck";
+
+// streamDeck.logger.setLevel(LogLevel.TRACE);
 
 import { VolumeAction } from "./actions/volume";
 import { PowerAction } from "./actions/power";
