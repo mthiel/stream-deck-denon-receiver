@@ -6,10 +6,13 @@ import { EventEmitter } from "events";
 import streamDeck from "@elgato/streamdeck";
 
 const HEOS_PORT = 1255;
-const HEOS_BROADCAST_PORT = 1900;
-const HEOS_BROADCAST_ADDRESS = "239.255.255.250";
-const BROADCAST_INTERVAL = 5000;
+const SSDP_BROADCAST_PORT = 1900;
+const SSDP_BROADCAST_ADDRESS = "239.255.255.250";
+const SSDP_BROADCAST_INTERVAL = 60000; // 1 minute
 
+/**
+ * Utility class to search for HEOS receivers on the network
+ */
 export class HEOSSearch {
     /** @type {Socket} */
     #socket;
@@ -57,7 +60,8 @@ export class HEOSSearch {
      * Start searching for HEOS receivers on the network
      */
     startSearching() {
-        this.#broadcastInterval = setInterval(() => { this.#broadcastSearch() }, BROADCAST_INTERVAL);
+        streamDeck.logger.debug("Started search for HEOS receivers on the network.");
+        this.#broadcastInterval = setInterval(() => { this.#broadcastSearch() }, SSDP_BROADCAST_INTERVAL);
         this.#broadcastSearch();
     }
 
@@ -67,6 +71,7 @@ export class HEOSSearch {
     stopSearching() {
         if (!this.#broadcastInterval) return;
 
+        streamDeck.logger.debug("Stopped search for HEOS receivers on the network.");
         clearInterval(this.#broadcastInterval);
         this.#broadcastInterval = undefined;
     }
@@ -88,11 +93,11 @@ export class HEOSSearch {
     #broadcastSearch() {
         if (!this.isReady) return;
 
-        streamDeck.logger.debug(`Broadcasting an SSDP M-SEARCH message for Denon receivers on the LAN`);
+        streamDeck.logger.debug(`Broadcasting an SSDP M-SEARCH message for HEOS receivers on the LAN`);
 
         const message = Buffer.from(
             'M-SEARCH * HTTP/1.1\r\n' +
-            'HOST: ' + HEOS_BROADCAST_ADDRESS + ':' + HEOS_BROADCAST_PORT + '\r\n' +
+            'HOST: ' + SSDP_BROADCAST_ADDRESS + ':' + SSDP_BROADCAST_PORT + '\r\n' +
             'MAN: "ssdp:discover"\r\n' +
             'ST: urn:schemas-denon-com:device:ACT-Denon:1\r\n' +
             'MX: 1\r\n' +
@@ -100,27 +105,46 @@ export class HEOSSearch {
         );
 
         streamDeck.logger.trace(`SSDP M-SEARCH Request:\n${message}`);
-        this.#socket.send(message, 0, message.length, HEOS_BROADCAST_PORT, HEOS_BROADCAST_ADDRESS);
+        this.#socket.send(message, 0, message.length, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
     }
 
     #onMessage(message, rinfo) {
-        streamDeck.logger.trace(`SSDP M-SEARCH Reply from ${rinfo.address}:\n${message}`);
+        streamDeck.logger.debug(`SSDP M-SEARCH Reply from ${rinfo.address}:\n${message}`);
 
         this.#emitter.emit("response", rinfo.address);
     }
 
     #onError(error) {
-        streamDeck.logger.error(`Error in HEOS search: ${error}`);
+        streamDeck.logger.error(`Error performing HEOS search: ${error}`);
         this.close();
     }
 }
 
 /**
- * Get the name of the receiver from the HEOS API
+ * Request the name of the receiver from it's HEOS API
+ * @param {string} host - The host address of the receiver
+ * @param {"telnet" | "http"} [method="telnet"] - The method to use to request the receiver name
+ * @returns {Promise<string | undefined>} A promise that resolves to the name of the receiver, or undefined if not found
+ */
+export async function getReceiverNameFromHost(host, method = "telnet") {
+    // This is a proxy function in case I want to add an HTTP request method in the future
+
+    switch(method) {
+        case "telnet":
+            return getReceiverNameFromHostByTelnet(host);
+        default:
+            throw new Error(`Unsupported method: ${method}`);
+    }
+}
+
+/**
+ * Use the HEOS Telnet API to request the name of the receiver
  * @param {string} host - The host address of the receiver
  * @returns {Promise<string | undefined>} A promise that resolves to the name of the receiver, or undefined if not found
  */
-export async function getReceiverNameFromHost(host) {
+async function getReceiverNameFromHostByTelnet(host) {
+    streamDeck.logger.debug(`Opening HEOS connection to ${host} to request the receiver name.`);
+
     /** 
      * Structure of a HEOS command response
      * @typedef {Object} HEOSResponse
@@ -147,16 +171,24 @@ export async function getReceiverNameFromHost(host) {
     const ac = new AbortController();
 
     // Set up a telnet connection to the receiver on port 1255
-    let telnet = new TelnetSocket(net.createConnection(HEOS_PORT, host));
+    const socket = net.createConnection(HEOS_PORT, host);
+    const telnet = new TelnetSocket(socket);
     if (!telnet) return;
 
-    telnet.on('connect', () => {
+    // Ignore standard telnet negotiation
+    telnet.on("do", (option) => telnet.writeWont(option));
+    telnet.on("will", (option) => telnet.writeDont(option));
+
+    telnet.on('connect', async () => {
+        streamDeck.logger.debug(`Connected to HEOS receiver at ${host}, requesting the player list.`);
         // Send request for 'get_players'
-        telnet.write("heos://player/get_players\r");
+        telnet.write("heos://player/get_players\r\n");
     });
 
     telnet.on('data', (data) => {
-        const lines = data.toString().split("\r");
+        streamDeck.logger.trace(`Received data from HEOS receiver at ${host}:\n${data}`);
+
+        const lines = data.toString().split("\r\n").filter((line) => line.length > 0);
 
         // Try to parse the response(s) into JSON
         /** @type {HEOSResponse[]} */
@@ -164,7 +196,7 @@ export async function getReceiverNameFromHost(host) {
             try { return JSON.parse(line); }
             catch(e) {
                 // Ignore malformed responses
-                streamDeck.logger.warn(`Error parsing HEOS response from ${host}: ${line}`);
+                streamDeck.logger.warn(`Error parsing HEOS response from HEOS receiver at ${host}: ${line}`);
             }
         })
         .filter((response) => response !== undefined);
@@ -175,7 +207,7 @@ export async function getReceiverNameFromHost(host) {
                 && response.heos?.result === "success"
                 && response.payload?.length > 0;
         });
-        
+
         // Flatten the 'payload' of each valid response into a single array
         const players = validResponses.map((response) => {
             return response.payload;
@@ -188,12 +220,29 @@ export async function getReceiverNameFromHost(host) {
 
         name = player?.name;
 
+        streamDeck.logger.debug(`Received player name from HEOS receiver at ${host}: ${name}`);
+
         // Stop waiting for a response if we found a match
         ac.abort();
     });
 
+    telnet.on('error', (error) => {
+        streamDeck.logger.error(`Error opening HEOS connection to ${host}: ${error}`);
+    });
+
+    telnet.on('close', () => {
+        streamDeck.logger.debug(`HEOS connection to ${host} closed.`);
+    });
+
     // Wait for a response until 'get_players' response is received, or timeout
-    await setTimeout(2000, null, { signal: ac.signal });
+    try {
+        await setTimeout(1000, null, { signal: ac.signal });
+        streamDeck.logger.warn(`Timeout waiting for HEOS response from ${host}.`);
+    } catch(e) {
+        // Aborted due to success, ironically.
+    }
+
+    streamDeck.logger.debug(`Closing HEOS connection to ${host}.`);
 
     telnet.end();
 
