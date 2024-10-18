@@ -9,48 +9,57 @@ import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
 import { DenonAVR } from "../modules/denonavr";
-import { HEOSSearch, getReceiverNameFromHost } from "../modules/heos";
+import { AVRTracker } from "../modules/ssdp";
 
 /**
  * @typedef {Object} VisibleAction
  * @property {string} id - The ID of the action.
- * @property {string} host - The host address of the associated receiver
+ * @property {string} uuid - The UUID of the associated receiver
  */
 
 /**
- * @typedef {Object} ReceiverInfo
- * @property {string} name - The name of the receiver
- * @property {string} address - The IP address of the receiver
+ * @typedef {Object} ConnectedReceiverInfo
+ * @property {string} uuid - The UUID of the receiver
+ * @property {DenonAVR} connection - The object representing the connected receiver
  */
 
 /**
  * Generic action class for the StreamDeck plugin
  * @extends SingletonAction
- * @property {DenonAVR[]} receivers - The list of receivers that this action is connected to.
+ * @property {ConnectedReceiverInfo[]} connectedReceivers - The list of receivers that these actions are connected to.
  */
-class PluginAction extends SingletonAction {
-	/** @type {DenonAVR[]} */
-	static connectedReceivers = [];
 
-	/** @type {VisibleAction[]} */
-	static visibleActions = [];
+/** @type {ConnectedReceiverInfo[]} */
+var connectedReceivers = [];
 
-	/** @type {HEOSSearch} */
-	static heosSearch;
+/** @type {VisibleAction[]} */
+var visibleActions = [];
 
-	/** @type {ReceiverInfo[]} */
-	static discoveredReceivers = [];
+export class PluginAction extends SingletonAction {
+	get connectedReceivers() {
+		return connectedReceivers;
+	}
+
+	get visibleActions() {
+		return visibleActions;
+	}
+
+	constructor() {
+		super();
+
+		AVRTracker.on("updated", () => { PluginAction.#getDiscoveredReceivers() });
+	}
 
 	/**
 	 * Set the PI's ID when it appears.
 	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
 	 */
 	onPropertyInspectorDidAppear(ev) {
-		this.#startSearchingForHEOSReceivers();
+		AVRTracker.startSearching();
 
-		this.getReceiverForAction(ev.action).then((receiver) => {
-			if (receiver) {
-				this.updateStatusMessage(receiver.statusMsg);
+		this.getConnectionForAction(ev.action).then((connection) => {
+			if (connection) {
+				this.updateStatusMessage(connection.statusMsg);
 			}
 		});
 	}
@@ -60,8 +69,6 @@ class PluginAction extends SingletonAction {
 	 * @param {PropertyInspectorDidDisappearEvent} ev - The event object.
 	 */
 	onPropertyInspectorDidDisappear(ev) {
-		this.#stopSearchingForHEOSReceivers();
-
 		ev.action.getSettings().then((settings) => {
 			settings.statusMsg = "";
 			ev.action.setSettings(settings);
@@ -73,11 +80,9 @@ class PluginAction extends SingletonAction {
 	 * @param {WillAppearEvent} ev - The event object.
 	 */
 	onWillAppear(ev) {
-		streamDeck.logger.debug(`onWillAppear for action id: ${ev.action.id}`);
-
-		const host = ev.payload.settings.host?.toString();
-		if (host) {
-			let receiver = PluginAction.connectedReceivers.find((receiver) => receiver.host === host);
+		const uuid = ev.payload.settings.uuid;
+		if (uuid) {
+			let receiver = connectedReceivers.find((receiver) => receiver.uuid === uuid);
 			if (receiver) {
 				this.associateVisibleActionToReceiver(ev.action, receiver);
 			} else {
@@ -114,7 +119,7 @@ class PluginAction extends SingletonAction {
 				});
 				break;
 			case "getDiscoveredReceivers":
-				this.#getDiscoveredReceivers();
+				PluginAction.#getDiscoveredReceivers();
 				break;
 			default:
 				streamDeck.logger.warn(`Received unknown event: ${event}`);
@@ -124,7 +129,7 @@ class PluginAction extends SingletonAction {
 	/**
 	 * Associate this action with a receiver, creating a new connection as necessary.
 	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-	 * @returns {Promise<DenonAVR | undefined>} The receiver object or undefined in case of error.
+	 * @returns {Promise<ConnectedReceiverInfo | undefined>} The receiver object or undefined in case of error.
 	 */
 	async connectReceiver(ev) {
 		let settings = ev.payload?.settings;
@@ -132,51 +137,52 @@ class PluginAction extends SingletonAction {
 			settings = await ev.action.getSettings();
 		}
 
-		if (!settings.host) {
+		if (!settings.uuid) {
 			this.updateStatusMessage("No receiver selected.");
 			return;
 		}
 
-		let receiver = PluginAction.connectedReceivers.find((receiver) => receiver.host === settings.host);
+		let receiver = connectedReceivers.find((receiver) => receiver.uuid === settings.uuid);
 		if (!receiver) {
-			streamDeck.logger.info(`Creating new receiver connection to ${settings.host}.`);
-			receiver = new DenonAVR(settings.host, settings.name);
-			PluginAction.connectedReceivers.push(receiver);
+			streamDeck.logger.info(`Creating new receiver connection to ${settings.name}.`);
+			const connection = new DenonAVR(settings.host);
+			receiver = { uuid: settings.uuid, connection };
+			connectedReceivers.push(receiver);
 
 			// Add event listeners for receiver events
-			receiver.on("status", (ev) => this.onReceiverStatusChange(ev));
-			receiver.on("connected", (ev) => this.onReceiverConnected(ev));
-			receiver.on("closed", (ev) => this.onReceiverDisconnected(ev));
-			receiver.on("powerChanged", (ev) => this.onReceiverPowerChanged(ev));
-			receiver.on("volumeChanged", (ev) => this.onReceiverVolumeChanged(ev));
-			receiver.on("muteChanged", (ev) => this.onReceiverMuteChanged(ev));
+			connection.on("status", (ev) => this.onReceiverStatusChange(ev));
+			connection.on("connected", (ev) => this.onReceiverConnected(ev));
+			connection.on("closed", (ev) => this.onReceiverDisconnected(ev));
+			connection.on("powerChanged", (ev) => this.onReceiverPowerChanged(ev));
+			connection.on("volumeChanged", (ev) => this.onReceiverVolumeChanged(ev));
+			connection.on("muteChanged", (ev) => this.onReceiverMuteChanged(ev));
 		}
 
-		this.updateStatusMessage(receiver.statusMsg);
+		this.updateStatusMessage(receiver.connection.statusMsg);
 
 		return receiver;
 	}
 
 	/**
-	 * Get the receiver object for an action.
+	 * Get the receiver connection for an action.
 	 * @param {Action} action - The action object.
 	 * @returns {Promise<DenonAVR | undefined>} The receiver object or undefined if not found.
 	 */
-	async getReceiverForAction(action) {
+	async getConnectionForAction(action) {
 		const settings = await action.getSettings();
-		return PluginAction.connectedReceivers.find((receiver) => receiver.host === settings.host);
+		return connectedReceivers.find((receiver) => receiver.uuid === settings.uuid)?.connection;
 	}
 
 	/**
-	 * Associate a visible action with a receiver.
+	 * Associate a visible action with a receiver connection.
 	 * @param {Action} action - The action object.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {ConnectedReceiverInfo} receiver - The receiver object.
 	 */
 	associateVisibleActionToReceiver(action, receiver) {
 		// Remove any existing visible actions with the same ID
-		PluginAction.visibleActions = PluginAction.visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
+		visibleActions = visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
 		// Add this visible action
-		PluginAction.visibleActions.push({ id: action.id, host: receiver.host });
+		visibleActions.push({ id: action.id, uuid: receiver.uuid });
 	}
 
 	/**
@@ -184,76 +190,37 @@ class PluginAction extends SingletonAction {
 	 * @param {Action | ActionContext} action - The action object.
 	 */
 	removeVisibleActionFromReceiver(action) {
-		PluginAction.visibleActions = PluginAction.visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
+		visibleActions = visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
 	}
 
 	/**
-	 * Get a list of detected receivers on the network and send it to the PI.
+	 * Reformat and send a reply to the PI with a current list of receivers found on the network.
 	 */
-	#getDiscoveredReceivers() {
-		const discoveredReceivers = PluginAction.discoveredReceivers;
+	static #getDiscoveredReceivers() {
+		const PI = streamDeck.ui.current;
+		if (!PI) { return; }
 
-		if (discoveredReceivers.length === 0) {
+		const discoveredReceivers = AVRTracker.receivers();
+
+		if (Object.keys(discoveredReceivers).length === 0) {
 			return;
 		}
 
-		const addressList = [
+		const receiverList = [
 			{
 				label: "Select a receiver",
 				value: ""
 			},
-			...discoveredReceivers.map((discoveredReceiver) => ({
-				label: discoveredReceiver.name,
-				value: discoveredReceiver.address
+			...Object.entries(discoveredReceivers).map(([uuid, receiver]) => ({
+				label: receiver.name || receiver.currentIP,
+				value: uuid
 			}))
 		];
 
-		streamDeck.ui.current?.sendToPropertyInspector({
+		PI.sendToPropertyInspector({
 			event: "getDiscoveredReceivers",
-			items: addressList
+			items: receiverList
 		});
-	}
-
-	/**
-	 * Start searching for HEOS receivers on the network.
-	 */
-	#startSearchingForHEOSReceivers() {
-		PluginAction.discoveredReceivers = [];
-
-		let heosSearch = PluginAction.heosSearch;
-
-		if (!heosSearch || heosSearch.destroyed) {
-			heosSearch = new HEOSSearch();
-			heosSearch.on("response", (address) => { this.#onHEOSResponse(address); });
-			PluginAction.heosSearch = heosSearch;
-		}
-
-		// Give the event loop a chance to init sockets, if needed. Then start searching.
-		setImmediate(() => { heosSearch.startSearching(); });
-	}
-
-	/**
-	 * Handle a HEOS response.
-	 * @param {string} address - The IP address of the HEOS receiver.
-	 */
-	#onHEOSResponse(address) {
-		const existingReceiver = PluginAction.discoveredReceivers.find((receiver) => receiver.address === address);
-		if (existingReceiver && existingReceiver.name !== address) {
-			return;
-		}
-
-		getReceiverNameFromHost(address)
-			.then((name) => {
-				PluginAction.discoveredReceivers.push({ name: name || address, address: address });
-				this.#getDiscoveredReceivers();
-			});
-	}
-
-	/**
-	 * Stop searching for HEOS receivers on the network.
-	 */
-	#stopSearchingForHEOSReceivers() {
-		PluginAction.heosSearch?.stopSearching();
 	}
 
 	/**
@@ -312,5 +279,3 @@ class PluginAction extends SingletonAction {
 	 */
 	onReceiverMuteChanged(receiver) {}
 }
-
-export { PluginAction };

@@ -18,17 +18,15 @@ const images = {
  * @extends {PluginAction}
  */
 @action({ UUID: "com.mthiel.denon-controller.volume" })
-class VolumeAction extends PluginAction {
+export class VolumeAction extends PluginAction {
 	/**
 	 * Adjust the volume when the dial is rotated.
 	 * @param {DialRotateEvent} ev - The event object.
 	 */
 	onDialRotate(ev) {
-		this.getReceiverForAction(ev.action)
-		.then((receiver) => {
-			if (!(receiver && receiver.changeVolume(ev.payload.ticks))) {
-				ev.action.showAlert();
-			}
+		this.getConnectionForAction(ev.action)
+		.then((connection) => {
+			connection?.changeVolume(ev.payload.ticks) || ev.action.showAlert();
 		});
 	}
 
@@ -37,78 +35,67 @@ class VolumeAction extends PluginAction {
 	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
-		this.getReceiverForAction(ev.action)
-		.then((receiver) => {
-			if (!(receiver && receiver.toggleMute())) {
-				ev.action.showAlert();
-			}
+		this.getConnectionForAction(ev.action)
+		.then((connection) => {
+			connection?.toggleMute() || ev.action.showAlert();
 		});
 	}
 
 	onKeyDown(ev) {
-		this.getReceiverForAction(ev.action)
-		.then((receiver) => {
-			if (!(receiver && receiver.changeVolumeAbsolute(ev.payload.settings.volumeLevel))) {
-				ev.action.showAlert();
-			}
+		this.getConnectionForAction(ev.action)
+		.then((connection) => {
+			connection?.changeVolumeAbsolute(ev.payload.settings.volumeLevel) || ev.action.showAlert();
 		});
 	}
 
 	/**
 	 * Handle a receiver volume changing.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {DenonAVR} connection - The receiver connection.
 	 */
-	onReceiverVolumeChanged(receiver) {
-		PluginAction.visibleActions
-			.filter((visibleAction) => visibleAction.host === receiver.host)
+	onReceiverVolumeChanged(connection) {
+		this.connectedReceivers
+		.filter((receiver) => receiver.connection === connection)
+		.forEach((receiver) => {
+			this.visibleActions
+			.filter((visibleAction) => visibleAction.uuid === receiver.uuid)
 			.forEach((visibleAction) => {
 				const action = streamDeck.actions.getActionById(visibleAction.id);
-				if (action?.isDial()) {
-					action.setFeedback({
-						indicator: {
-							value: (receiver.volume / receiver.maxVolume) * 100
-						},
-						value: `Vol: ${receiver.volume}`
-					});
-				}
+				action?.isDial() && action.setFeedback({
+					indicator: {
+						value: (connection.volume / connection.maxVolume) * 100
+					},
+					value: `Vol: ${connection.volume}`
+				});
 			});
-
+		});
 	}
 
 	/**
 	 * Handle a receiver mute changing.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {DenonAVR} connection - The receiver connection.
 	 */
-	onReceiverMuteChanged(receiver) {
-		PluginAction.visibleActions
-			.filter((visibleAction) => visibleAction.host === receiver.host)
+	onReceiverMuteChanged(connection) {
+		this.connectedReceivers
+		.filter((receiver) => receiver.connection === connection)
+		.forEach((receiver) => {
+			this.visibleActions
+			.filter((visibleAction) => visibleAction.uuid === receiver.uuid)
 			.forEach((visibleAction) => {
 				const action = streamDeck.actions.getActionById(visibleAction.id);
-				if (action?.isDial()) {
-					if (receiver.muted) {
-						action.setFeedback({
-							value: "Muted",
-							indicator: {
-								value: 0
-							}
-						});
-						action.setFeedback({
-							icon: images.muted
-						});
-					} else {
-						action.setFeedback({
-							indicator: {
-								value: (receiver.volume / receiver.maxVolume) * 100
-							},
-							value: `Vol: ${receiver.volume}`
-						});
-						action.setFeedback({
-							icon: images.unmuted
-						});
+				const { muted, volume, maxVolume } = connection;
+				action?.isDial()
+				&& action.setFeedback({
+					value: muted ? "Muted" : `Vol: ${volume}`,
+					indicator: {
+						value: muted ? 0 : (volume / maxVolume) * 100
 					}
-				}
+				})
+				.then(() => {
+					action.setFeedback({
+						icon: muted ? images.muted : images.unmuted
+					});
+				});
 			});
+		});
 	}
 }
-
-export { VolumeAction };

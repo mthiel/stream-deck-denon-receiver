@@ -1,14 +1,14 @@
 import net from "net";
-import dgram from "dgram";
-import { TelnetSocket } from "telnet-stream";
 import { EventEmitter } from "events";
 import { setTimeout } from "timers/promises";
+
+import { TelnetSocket } from "telnet-stream";
 import streamDeck from "@elgato/streamdeck";
 
 /**
  * Represents a connection to a Denon AVR receiver
  */
-class DenonAVR {
+export class DenonAVR {
 	/**
 	 * Whether the receiver is powered on
 	 * @type {boolean}
@@ -34,16 +34,16 @@ class DenonAVR {
 	muted;
 
 	/**
-	 * The event emitter for this instance
-	 * @type {EventEmitter}
-	 */
-	#eventEmitter = new EventEmitter();
-
-	/**
 	 * The status message for this instance
 	 * @type {string}
 	 */
 	statusMsg = "Initializing...";
+
+	/**
+	 * The event emitter for this instance
+	 * @type {EventEmitter}
+	 */
+	#eventEmitter = new EventEmitter();
 
 	/**
 	 * The raw socket connection to the receiver
@@ -64,26 +64,18 @@ class DenonAVR {
 	#reconnectCount = 0;
 
 	/**
-	 * The host address of the receiver and the ID for this instance
+	 * The host address of the receiver
 	 * @type {string}
 	 */
 	#host;
 	get host() { return this.#host; }
 
 	/**
-	 * The display name of the receiver
-	 * @type {string}
-	 */
-	name;
-
-	/**
-	 * Create a new DenonAVR instance
+	 * Create a new DenonAVR instance and attempt to connect to the receiver
 	 * @param {string} host - The host to connect to
-	 * @param {string} [name] - The display name of the receiver
 	 */
-	constructor(host, name = host) {
+	constructor(host) {
 		this.#host = host;
-		this.name = name;
 		this.connect();
 	}
 
@@ -378,5 +370,3 @@ class DenonAVR {
 		telnet.write("MU?\r"); // Request the mute status
 	}
 }
-
-export { DenonAVR };

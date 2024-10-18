@@ -11,41 +11,34 @@ import { PluginAction } from "./action";
  * @extends {PluginAction}
  */
 @action({ UUID: "com.mthiel.denon-controller.power" })
-class PowerAction extends PluginAction {
+export class PowerAction extends PluginAction {
 	/**
 	 * Toggle the power state when the key is pressed
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
 		// TODO: Make options for explicit on/off vs. toggle
-		this.getReceiverForAction(ev.action)
-		.then((receiver) => {
-			if (!receiver) {
-				ev.action.showAlert();
-				return;
-			}
-
-			if (!receiver?.togglePower()) {
-				ev.action.showAlert();
-				}
+		this.getConnectionForAction(ev.action)
+			.then((connection) => {
+				connection?.togglePower() || ev.action.showAlert();
 			});
 	}
 
 	/**
 	 * Handle a receiver power changing.
 	 * @override
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {DenonAVR} connection - The receiver connection.
 	 */
-	onReceiverPowerChanged(receiver) {
-		PluginAction.visibleActions
-			.filter((visibleAction) => visibleAction.host === receiver.host)
+	onReceiverPowerChanged(connection) {
+		this.connectedReceivers
+		.filter((receiver) => receiver.connection === connection)
+		.forEach((receiver) => {
+			this.visibleActions
+			.filter((visibleAction) => visibleAction.uuid === receiver.uuid)
 			.forEach((visibleAction) => {
 				const action = streamDeck.actions.getActionById(visibleAction.id);
-				if (action?.isKey()) {
-					action.setState(receiver.power ? 0 : 1);
-				}
+				action?.isKey() && action.setState(connection.power ? 0 : 1);
 			});
+		});
 	}
 }
-
-export { PowerAction };
