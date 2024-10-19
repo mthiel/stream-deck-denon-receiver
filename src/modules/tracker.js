@@ -26,7 +26,7 @@ const SSDP_BROADCAST_PORT = 1900;
 const SSDP_BROADCAST_ADDRESS = "239.255.255.250";
 const SSDP_SEARCH_TARGET = "urn:schemas-denon-com:device:ACT-Denon:1";
 const SSDP_SEARCH_MX = 3; // 3 seconds
-const SSDP_BROADCAST_INTERVAL = (SSDP_SEARCH_MX + 1) * 1000; // 4000 ms
+const SSDP_BROADCAST_INTERVAL = (SSDP_SEARCH_MX) * 1000; // 3000 ms
 const SSDP_BROADCAST_LIMIT = 3; // Number of broadcasts to send before stopping
 
 // Prep a udp socket for SSDP/UPnP discovery
@@ -38,14 +38,21 @@ const emitter = new EventEmitter();
 /** @type {ReceiverList} */
 const receiverList = {};
 
-function broadcastSearch() {
-	udpSocket.send(SSDP_SEARCH_MESSAGE, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
-	streamDeck.logger.debug(`AVRTracker broadcasted an SSDP search for ${SSDP_SEARCH_TARGET}`);
+/** @type {boolean} */
+let isScanning = false;
 
-	broadcastCounter++;
-	if (broadcastCounter >= SSDP_BROADCAST_LIMIT) {
-		AVRTracker.stopBroadcasting();
-	}
+/**
+ * Create an SSDP search message
+ * @param {number} [mx] - The maximum wait time for a response
+ * @returns {string}
+ */
+function createSSDPMessage(mx = SSDP_SEARCH_MX) {
+	return 'M-SEARCH * HTTP/1.1\r\n' +
+		`HOST: ${SSDP_BROADCAST_ADDRESS}:${SSDP_BROADCAST_PORT}\r\n` +
+		'MAN: "ssdp:discover"\r\n' +
+		`MX: ${mx}\r\n` +
+		`ST: ${SSDP_SEARCH_TARGET}\r\n` +
+		'\r\n';
 }
 
 /**
@@ -112,43 +119,58 @@ function onResponse(message, rinfo) {
 export const AVRTracker = {
 	/**
 	 * Initialize the tracker
+	 * @param {() => void} [callback] - An optional callback when the tracker is ready
 	 */
-	listen: () => {
-		streamDeck.logger.debug("AVRTracker initializing...");
+	listen: (callback = undefined) => {
+		streamDeck.logger.debug("AVRTracker listener initializing...");
 
 		udpSocket = dgram
-		.createSocket("udp4")
-		.on("listening", () => { streamDeck.logger.debug("AVRTracker udp socket is ready."); })
-		.on("message", (message, rinfo) => { onResponse(message, rinfo) })
-		.on("error", (error) => { streamDeck.logger.error(`AVRTracker error: ${error}`) })
-		.bind();
+			.createSocket("udp4")
+			.on("listening", () => { streamDeck.logger.debug("AVRTracker udp socket is ready."); })
+			.on("message", (message, rinfo) => { onResponse(message, rinfo) })
+			.on("error", (error) => { streamDeck.logger.error(`AVRTracker error: ${error}`) })
+			.bind({}, callback);
 	},
 
 	/**
 	 * Perform an active search for HEOS-enabled AVR receivers on the network
+	 * @param {number} [count] - The number of SSDP messages to send
+	 * @param {number} [maxWait] - The maximum wait time for a response
 	 * @returns {Promise<ReceiverList>}
 	 */
-	searchForReceivers: async () => {
+	searchForReceivers: async (count = SSDP_BROADCAST_LIMIT, maxWait = SSDP_BROADCAST_INTERVAL) => {
+		if (isScanning) {
+			// If we're already scanning, just wait for the current scan to complete and return the results
+			await new Promise((resolve) => AVRTracker.once("scanned", resolve));
+			return receiverList;
+		}
+
 		streamDeck.logger.info("AVRTracker broadcasting a SSDP search for HEOS receivers on the network...");
+
+		isScanning = true;
 
 		const startTime = Date.now();
 
 		function onUpdate() {
-			const newCount = Object.values(receiverList).filter((r) => { r.lastSeen > startTime }).length;
+			const newCount = Object.values(receiverList).filter((r) => r.lastSeen > startTime).length;
 			streamDeck.logger.info(`AVRTracker received ${newCount} new responses while actively searching.`);
 		}
 
 		AVRTracker.on("updated", onUpdate);
 
-		for (let i = 1; i <= SSDP_BROADCAST_LIMIT; i++) {
-			udpSocket.send(SSDP_SEARCH_MESSAGE, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
+		for (let i = 1; i <= count; i++) {
+			udpSocket.send(createSSDPMessage(maxWait), SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
 
-			streamDeck.logger.info(`AVRTracker sent request ${i} of ${SSDP_BROADCAST_LIMIT}. Waiting for replies...`);
+			streamDeck.logger.info(`AVRTracker sent request ${i} of ${count}. Waiting for replies...`);
 
-			await new Promise((resolve) => setTimeout(resolve, SSDP_BROADCAST_INTERVAL));
+			await new Promise((resolve) => setTimeout(resolve, maxWait * 1000));
 		}
 
 		AVRTracker.off("updated", onUpdate);
+
+		isScanning = false;
+
+		emitter.emit("scanned");
 
 		return receiverList;
 	},
@@ -160,8 +182,14 @@ export const AVRTracker = {
 	getReceivers: () => receiverList,
 
 	/**
-	 * Event listener to be notified when the receiver list is updated
-	 * @param {"updated"} event - The event to listen for
+	 * Check if the tracker is currently scanning for receivers
+	 * @returns {boolean}
+	 */
+	isScanning: () => isScanning,
+
+	/**
+	 * Subscribe to be notified of scanning events
+	 * @param {"updated" | "scanned"} event - The event to listen for
 	 * @param {EventListener} callback - The callback to call when the event is emitted
 	 */
 	on(event, callback) {
@@ -169,8 +197,17 @@ export const AVRTracker = {
 	},
 
 	/**
-	 * Remove an event listener from the receiver list
-	 * @param {"updated"} event - The event to remove the listener from
+	 * Subscribe to be notified (once) of a scanning event
+	 * @param {"updated" | "scanned"} event - The event to listen for
+	 * @param {EventListener} callback - The callback to call when the event is emitted
+	 */
+	once(event, callback) {
+		emitter.once(event, callback);
+	},
+
+	/**
+	 * Unsubscribe from scanning events
+	 * @param {"updated" | "scanned"} event - The event to remove the listener from
 	 * @param {EventListener} callback - The callback to remove
 	 */
 	off(event, callback) {

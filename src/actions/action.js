@@ -36,6 +36,7 @@ var visibleActions = [];
 
 export class PluginAction extends SingletonAction {
 	// Plugin-level context
+	/** @type {import("../plugin").PluginContext} */
 	plugin;
 
 	get connectedReceivers() {
@@ -60,47 +61,53 @@ export class PluginAction extends SingletonAction {
 	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
 	 */
 	onPropertyInspectorDidAppear(ev) {
-		// Start broadcasting for receivers if the user hasn't selected a receiver for this action yet
-		ev.action.getSettings().then((settings) => {
-			if (!settings.uuid) {
-				this.plugin.AVRTracker.startBroadcasting();
-			}
-		});
-
-		// Update the status message for the action if the receiver is already connected
+		// Refresh the connection status message for the action
 		this.getConnectionForAction(ev.action).then((connection) => {
+			let statusMsg = "";
 			if (connection) {
-				this.updateStatusMessage(connection.statusMsg);
+				statusMsg = connection.statusMsg;
 			}
+			this.updateStatusMessage(statusMsg);
 		});
 	}
 
 	/**
-	 * Try to create a new receiver connection (if necessary) before the action will appear.
+	 * Handles checking if an appearing action has a receiver selected already and
+	 * tries to re-associate or re-connect to it.
 	 * @param {WillAppearEvent} ev - The event object.
 	 */
 	onWillAppear(ev) {
+		// Check for a UUID of a selected receiver
 		const uuid = ev.payload.settings.uuid;
 		if (uuid) {
+			// Should we wait for the receiver list to be updated?
+			if (Object.keys(AVRTracker.getReceivers()).length === 0 && AVRTracker.isScanning()) {
+				// Wait for the scan to complete and try again
+				AVRTracker.once("scanned", () => this.onWillAppear(ev));
+				return;
+			}
+
+			// Check for an existing connection to associate with
 			let receiver = connectedReceivers.find((receiver) => receiver.uuid === uuid);
 			if (receiver) {
-				this.associateVisibleActionToReceiver(ev.action, receiver);
+				// (Re)associate this action with the existing connection
+				this.associateActionWithReceiver(ev.action, receiver);
 			} else {
-				this.connectReceiver(ev).then((receiver) => {
-					if (receiver) {
-						this.associateVisibleActionToReceiver(ev.action, receiver);
-					}
+				// Start a connection process and associate it if it completes successfully
+				this.connectReceiver(ev)
+				.then((receiver) => {
+					if (receiver) this.associateActionWithReceiver(ev.action, receiver);
 				});
 			}
 		}
 	}
 
 	/**
-	 * Remove a visible action when it's disappearing.
+	 * Handles updating states when an action will no longer be visible
 	 * @param {WillDisappearEvent} ev - The event object.
 	 */
 	onWillDisappear(ev) {
-		this.removeVisibleActionFromReceiver(ev.action);
+		this.disassociateActionFromReceiver(ev.action);
 	}
 
 	/**
@@ -114,7 +121,7 @@ export class PluginAction extends SingletonAction {
 			case "userChoseReceiver":
 				this.connectReceiver(ev).then((receiver) => {
 					if (receiver) {
-						this.associateVisibleActionToReceiver(ev.action, receiver);
+						this.associateActionWithReceiver(ev.action, receiver);
 					}
 				});
 				break;
@@ -137,7 +144,8 @@ export class PluginAction extends SingletonAction {
 		// refreshed, actively attempt to scan for receivers now.
 		const settings = await ev.action.getSettings();
 		if (!settings?.uuid || ev.payload.isRefresh === true) {
-			const receivers = await AVRTracker.searchForReceivers();
+			// Perform a short scan for receivers
+			const receivers = await AVRTracker.searchForReceivers(1, 2);
 
 			// Convert the dict stricture into options
 			options = [
@@ -165,7 +173,7 @@ export class PluginAction extends SingletonAction {
 	}
 
 	/**
-	 * Associate this action with a receiver, creating a new connection as necessary.
+	 * Create a new receiver connection (if necessary) and return it.
 	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
 	 * @returns {Promise<ConnectedReceiverInfo | undefined>} The receiver object or undefined in case of error.
 	 */
@@ -175,14 +183,17 @@ export class PluginAction extends SingletonAction {
 			settings = await ev.action.getSettings();
 		}
 
+		// If no receiver is selected, don't try to connect
 		if (!settings.uuid) {
 			this.updateStatusMessage("No receiver selected.");
 			return;
 		}
 
+		// Check for an existing connection
 		let receiver = connectedReceivers.find((receiver) => receiver.uuid === settings.uuid);
 		if (!receiver) {
-			const receiverInfo = this.plugin.AVRTracker.getReceivers()[settings.uuid];
+			// Get the receiver info from the tracker
+			const receiverInfo = AVRTracker.getReceivers()[settings.uuid];
 			if (!receiverInfo) {
 				this.updateStatusMessage(`Receiver ${settings.name} not found.`);
 				return;
@@ -218,11 +229,11 @@ export class PluginAction extends SingletonAction {
 	}
 
 	/**
-	 * Associate a visible action with a receiver connection.
+	 * Associate an action with a receiver connection.
 	 * @param {Action} action - The action object.
 	 * @param {ConnectedReceiverInfo} receiver - The receiver object.
 	 */
-	associateVisibleActionToReceiver(action, receiver) {
+	associateActionWithReceiver(action, receiver) {
 		// Remove any existing visible actions with the same ID
 		visibleActions = visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
 		// Add this visible action
@@ -233,7 +244,7 @@ export class PluginAction extends SingletonAction {
 	 * Remove a visible action from the list of visible actions.
 	 * @param {Action | ActionContext} action - The action object.
 	 */
-	removeVisibleActionFromReceiver(action) {
+	disassociateActionFromReceiver(action) {
 		visibleActions = visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
 	}
 
