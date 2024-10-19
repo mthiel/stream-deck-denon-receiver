@@ -9,8 +9,8 @@
 
 <body>
 	<sdpi-item label="Receiver">
-		<sdpi-select id="receiverSelect" setting="uuid" label-setting="name" datasource="getDiscoveredReceivers"
-			loading="Searching for receivers..." hot-reload="true" oninput="userChoseReceiver()">
+		<sdpi-select id="receiverSelect" setting="uuid" label-setting="name" datasource="refreshReceiverList"
+			loading="Searching for receivers..." show-refresh="true" oninput="userChoseReceiver()">
 		</sdpi-select>
 	</sdpi-item>
 	<!-- NOTE: May re-use these later for manual entry of receiver details -->
@@ -74,8 +74,6 @@
 			}
 		}
 
-
-		// Ensure the connect button is updated after the page loads
 		setTimeout(() => {
 			updateLayoutForAction();
 		}, 1);

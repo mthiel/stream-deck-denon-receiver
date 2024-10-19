@@ -1,149 +1,17 @@
 import net from "net";
-import dgram, { Socket } from "dgram";
 import { setTimeout } from "timers/promises";
 import { TelnetSocket } from "telnet-stream";
-import { EventEmitter } from "events";
 import streamDeck from "@elgato/streamdeck";
 
 const HEOS_PORT = 1255;
-const SSDP_BROADCAST_PORT = 1900;
-const SSDP_BROADCAST_ADDRESS = "239.255.255.250";
-const SSDP_BROADCAST_INTERVAL = 60000; // 1 minute
-
-/**
- * Utility class to search for HEOS receivers on the network
- */
-export class HEOSSearch {
-    /** @type {Socket} */
-    #socket;
-
-    /** @type {EventEmitter} */
-    #emitter;
-
-    /** @type {NodeJS.Timeout | undefined} */
-    #broadcastInterval;
-
-    /** @type {boolean} */
-    #isReady = false;
-    get isReady() { return this.#isReady; }
-
-    /** @type {boolean} */
-    #destroyed = false;
-    get destroyed() { return this.#destroyed; }
-
-    /**
-     * Create a new HEOS search instance
-     */
-    constructor() {
-        this.#socket = dgram.createSocket("udp4");
-        this.#emitter = new EventEmitter();
-
-		this.#socket.once("listening", () => { this.#isReady = true; });
-		this.#socket.on("message", (message, rinfo) => { this.#onMessage(message, rinfo) });
-        this.#socket.on("error", (error) => { this.#onError(error) });
-
-        this.#socket.bind();
-    }
-
-   	/** @typedef {(...args: any[]) => void} EventListener */
-
-    /**
-     * Subscribe to an event
-     * @param {"response"} eventName - The name of the event to subscribe to
-     * @param {EventListener} listener - The listener function to call when the event is emitted
-     */
-    on(eventName, listener) {
-        this.#emitter.on(eventName, listener);
-    }
-
-    /**
-     * Start searching for HEOS receivers on the network
-     */
-    startSearching() {
-        streamDeck.logger.debug("Started search for HEOS receivers on the network.");
-        this.#broadcastInterval = setInterval(() => { this.#broadcastSearch() }, SSDP_BROADCAST_INTERVAL);
-        this.#broadcastSearch();
-    }
-
-    /**
-     * Stop searching for HEOS receivers on the network
-     */
-    stopSearching() {
-        if (!this.#broadcastInterval) return;
-
-        streamDeck.logger.debug("Stopped search for HEOS receivers on the network.");
-        clearInterval(this.#broadcastInterval);
-        this.#broadcastInterval = undefined;
-    }
-
-    /**
-     * Close the HEOS search and clean-up resources
-     */
-    close() {
-        this.stopSearching();
-        this.#isReady = false;
-        this.#socket.close();
-        this.#emitter.removeAllListeners();
-        this.#destroyed = true;
-    }
-
-    /**
-     * Broadcast an SSDP M-SEARCH message for HEOS receivers on the LAN
-     */
-    #broadcastSearch() {
-        if (!this.isReady) return;
-
-        streamDeck.logger.debug(`Broadcasting an SSDP M-SEARCH message for HEOS receivers on the LAN`);
-
-        const message = Buffer.from(
-            'M-SEARCH * HTTP/1.1\r\n' +
-            'HOST: ' + SSDP_BROADCAST_ADDRESS + ':' + SSDP_BROADCAST_PORT + '\r\n' +
-            'MAN: "ssdp:discover"\r\n' +
-            'ST: urn:schemas-denon-com:device:ACT-Denon:1\r\n' +
-            'MX: 1\r\n' +
-            '\r\n'
-        );
-
-        streamDeck.logger.trace(`SSDP M-SEARCH Request:\n${message}`);
-        this.#socket.send(message, 0, message.length, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
-    }
-
-    #onMessage(message, rinfo) {
-        streamDeck.logger.debug(`SSDP M-SEARCH Reply from ${rinfo.address}:\n${message}`);
-
-        this.#emitter.emit("response", rinfo.address);
-    }
-
-    #onError(error) {
-        streamDeck.logger.error(`Error performing HEOS search: ${error}`);
-        this.close();
-    }
-}
-
-/**
- * Request the name of the receiver from it's HEOS API
- * @param {string} host - The host address of the receiver
- * @param {"telnet" | "http"} [method="telnet"] - The method to use to request the receiver name
- * @returns {Promise<string | undefined>} A promise that resolves to the name of the receiver, or undefined if not found
- */
-export async function getReceiverNameFromHost(host, method = "telnet") {
-    // This is a proxy function in case I want to add an HTTP request method in the future
-
-    switch(method) {
-        case "telnet":
-            return getReceiverNameFromHostByTelnet(host);
-        default:
-            throw new Error(`Unsupported method: ${method}`);
-    }
-}
 
 /**
  * Use the HEOS Telnet API to request the name of the receiver
  * @param {string} host - The host address of the receiver
  * @returns {Promise<string | undefined>} A promise that resolves to the name of the receiver, or undefined if not found
  */
-async function getReceiverNameFromHostByTelnet(host) {
-    streamDeck.logger.debug(`Opening HEOS connection to ${host} to request the receiver name.`);
+export async function getNameFromHostByTelnet(host) {
+    streamDeck.logger.debug(`Opening HEOS CLI connection to ${host} to request the receiver name.`);
 
     /** 
      * Structure of a HEOS command response

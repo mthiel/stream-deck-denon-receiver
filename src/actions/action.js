@@ -4,12 +4,11 @@ import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
 /** @typedef {import("@elgato/streamdeck").WillDisappearEvent} WillDisappearEvent */
 /** @typedef {import("@elgato/streamdeck").PropertyInspectorDidAppearEvent} PropertyInspectorDidAppearEvent */
-/** @typedef {import("@elgato/streamdeck").PropertyInspectorDidDisappearEvent} PropertyInspectorDidDisappearEvent */
 /** @typedef {import("@elgato/streamdeck").DidReceiveSettingsEvent} DidReceiveSettingsEvent */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
 import { DenonAVR } from "../modules/denonavr";
-import { AVRTracker } from "../modules/ssdp";
+import { AVRTracker } from "../modules/tracker";
 
 /**
  * @typedef {Object} VisibleAction
@@ -36,6 +35,9 @@ var connectedReceivers = [];
 var visibleActions = [];
 
 export class PluginAction extends SingletonAction {
+	// Plugin-level context
+	plugin;
+
 	get connectedReceivers() {
 		return connectedReceivers;
 	}
@@ -44,34 +46,32 @@ export class PluginAction extends SingletonAction {
 		return visibleActions;
 	}
 
-	constructor() {
+	/**
+	 * @param {import("../plugin").PluginContext} plugin 
+	 */
+	constructor(plugin) {
 		super();
 
-		AVRTracker.on("updated", () => { PluginAction.#getDiscoveredReceivers() });
+		this.plugin = plugin;
 	}
 
 	/**
-	 * Set the PI's ID when it appears.
+	 * Handle the PI appearing by refreshing data
 	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
 	 */
 	onPropertyInspectorDidAppear(ev) {
-		AVRTracker.startSearching();
+		// Start broadcasting for receivers if the user hasn't selected a receiver for this action yet
+		ev.action.getSettings().then((settings) => {
+			if (!settings.uuid) {
+				this.plugin.AVRTracker.startBroadcasting();
+			}
+		});
 
+		// Update the status message for the action if the receiver is already connected
 		this.getConnectionForAction(ev.action).then((connection) => {
 			if (connection) {
 				this.updateStatusMessage(connection.statusMsg);
 			}
-		});
-	}
-
-	/**
-	 * Clean-up the action settings when it's PI disappears.
-	 * @param {PropertyInspectorDidDisappearEvent} ev - The event object.
-	 */
-	onPropertyInspectorDidDisappear(ev) {
-		ev.action.getSettings().then((settings) => {
-			settings.statusMsg = "";
-			ev.action.setSettings(settings);
 		});
 	}
 
@@ -118,12 +118,50 @@ export class PluginAction extends SingletonAction {
 					}
 				});
 				break;
-			case "getDiscoveredReceivers":
-				PluginAction.#getDiscoveredReceivers();
+			case "refreshReceiverList":
+				this.onRefreshReceiversForPI(ev);
 				break;
 			default:
 				streamDeck.logger.warn(`Received unknown event: ${event}`);
 		}
+	}
+
+	/**
+	 * Handle a request from the PI to refresh the receiver list
+	 * @param {SendToPluginEvent} ev 
+	 */
+	async onRefreshReceiversForPI(ev) {
+		let options;
+
+		// If this action isn't configured yet, or the user has manally
+		// refreshed, actively attempt to scan for receivers now.
+		const settings = await ev.action.getSettings();
+		if (!settings?.uuid || ev.payload.isRefresh === true) {
+			const receivers = await AVRTracker.searchForReceivers();
+
+			// Convert the dict stricture into options
+			options = [
+				{
+					label: Object.keys(receivers).length > 0
+						? "Select a receiver"
+						: "No receivers detected",
+					value: ""
+				},
+				...Object.entries(receivers).map(([uuid, receiver]) => ({
+					label: receiver.name || receiver.currentIP,
+					value: uuid
+				}))
+			];
+		} else {
+			// Just send back the current selection to avoid unnecessary
+			// scanning every time the user opens the PI
+			options = [{ label: settings.name, value: settings.uuid }];
+		}
+
+		streamDeck.ui.current?.sendToPropertyInspector({
+			event: "refreshReceiverList",
+			items: options
+		});
 	}
 
 	/**
@@ -144,18 +182,24 @@ export class PluginAction extends SingletonAction {
 
 		let receiver = connectedReceivers.find((receiver) => receiver.uuid === settings.uuid);
 		if (!receiver) {
-			streamDeck.logger.info(`Creating new receiver connection to ${settings.name}.`);
-			const connection = new DenonAVR(settings.host);
+			const receiverInfo = this.plugin.AVRTracker.getReceivers()[settings.uuid];
+			if (!receiverInfo) {
+				this.updateStatusMessage(`Receiver ${settings.name} not found.`);
+				return;
+			}
+
+			streamDeck.logger.info(`Creating new receiver connection to ${receiverInfo.name}.`);
+			const connection = new DenonAVR(receiverInfo.currentIP);
 			receiver = { uuid: settings.uuid, connection };
 			connectedReceivers.push(receiver);
 
 			// Add event listeners for receiver events
-			connection.on("status", (ev) => this.onReceiverStatusChange(ev));
-			connection.on("connected", (ev) => this.onReceiverConnected(ev));
-			connection.on("closed", (ev) => this.onReceiverDisconnected(ev));
-			connection.on("powerChanged", (ev) => this.onReceiverPowerChanged(ev));
-			connection.on("volumeChanged", (ev) => this.onReceiverVolumeChanged(ev));
-			connection.on("muteChanged", (ev) => this.onReceiverMuteChanged(ev));
+			connection.on("status", (ev) => { this.onReceiverStatusChange(ev); });
+			connection.on("connected", (ev) => { this.onReceiverConnected(ev); });
+			connection.on("closed", (ev) => { this.onReceiverDisconnected(ev); });
+			connection.on("powerChanged", (ev) => { this.onReceiverPowerChanged(ev); });
+			connection.on("volumeChanged", (ev) => { this.onReceiverVolumeChanged(ev); });
+			connection.on("muteChanged", (ev) => { this.onReceiverMuteChanged(ev); });
 		}
 
 		this.updateStatusMessage(receiver.connection.statusMsg);
@@ -196,12 +240,11 @@ export class PluginAction extends SingletonAction {
 	/**
 	 * Reformat and send a reply to the PI with a current list of receivers found on the network.
 	 */
-	static #getDiscoveredReceivers() {
+	#refreshReceiverList() {
 		const PI = streamDeck.ui.current;
 		if (!PI) { return; }
 
-		const discoveredReceivers = AVRTracker.receivers();
-
+		const discoveredReceivers = this.plugin.AVRTracker.getReceivers();
 		if (Object.keys(discoveredReceivers).length === 0) {
 			return;
 		}
@@ -218,7 +261,7 @@ export class PluginAction extends SingletonAction {
 		];
 
 		PI.sendToPropertyInspector({
-			event: "getDiscoveredReceivers",
+			event: "refreshReceiverList",
 			items: receiverList
 		});
 	}

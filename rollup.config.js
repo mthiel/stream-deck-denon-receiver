@@ -33,9 +33,6 @@ const config = {
 			exportConditions: ["node"],
 			preferBuiltins: true
 		}),
-		json({
-			include: /node_modules/
-		}),
 		commonjs({
 			include: /node_modules/
 		}),
