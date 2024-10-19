@@ -1,4 +1,5 @@
-import dgram, { Socket } from "dgram";
+import dgram from "dgram";
+/** @typedef {import("dgram").Socket} Socket */
 /** @typedef {import("dgram").RemoteInfo} RemoteInfo */
 import { EventEmitter } from "events";
 
@@ -28,25 +29,11 @@ const SSDP_SEARCH_MX = 3; // 3 seconds
 const SSDP_BROADCAST_INTERVAL = (SSDP_SEARCH_MX + 1) * 1000; // 4000 ms
 const SSDP_BROADCAST_LIMIT = 3; // Number of broadcasts to send before stopping
 
-const SSDP_SEARCH_MESSAGE =
-	'M-SEARCH * HTTP/1.1\r\n' +
-	`HOST: ${SSDP_BROADCAST_ADDRESS}:${SSDP_BROADCAST_PORT}\r\n` +
-	'MAN: "ssdp:discover"\r\n' +
-	`MX: ${SSDP_SEARCH_MX}\r\n` +
-	`ST: ${SSDP_SEARCH_TARGET}\r\n` +
-	'\r\n';
-
 // Prep a udp socket for SSDP/UPnP discovery
 /** @type {Socket} */
 var udpSocket;
 
 const emitter = new EventEmitter();
-
-/** @type {NodeJS.Timeout | undefined} */
-let broadcastTimer;
-
-/** @type {number} */
-let broadcastCounter = 0;
 
 /** @type {ReceiverList} */
 const receiverList = {};
@@ -164,29 +151,6 @@ export const AVRTracker = {
 		AVRTracker.off("updated", onUpdate);
 
 		return receiverList;
-	},
-
-	/**
-	 * Start broadcasting for receivers on the network
-	 */
-	startBroadcasting: () => {
-		streamDeck.logger.debug("AVRTracker started broadcasting for HEOS receivers on the network.");
-
-		broadcastTimer = broadcastTimer || setInterval(broadcastSearch, SSDP_BROADCAST_INTERVAL);
-		broadcastCounter = 0;
-		broadcastSearch();
-	},
-
-	/**
-	 * Stop broadcasting for receivers on the network
-	 */
-	stopBroadcasting: () => {
-		if (!broadcastTimer) return;
-
-		streamDeck.logger.debug("AVRTracker stopped broadcasting for HEOS receivers on the network.");
-		clearInterval(broadcastTimer);
-		broadcastTimer = undefined;
-		broadcastCounter = 0;
 	},
 
 	/**

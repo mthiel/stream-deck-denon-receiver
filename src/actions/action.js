@@ -238,35 +238,6 @@ export class PluginAction extends SingletonAction {
 	}
 
 	/**
-	 * Reformat and send a reply to the PI with a current list of receivers found on the network.
-	 */
-	#refreshReceiverList() {
-		const PI = streamDeck.ui.current;
-		if (!PI) { return; }
-
-		const discoveredReceivers = this.plugin.AVRTracker.getReceivers();
-		if (Object.keys(discoveredReceivers).length === 0) {
-			return;
-		}
-
-		const receiverList = [
-			{
-				label: "Select a receiver",
-				value: ""
-			},
-			...Object.entries(discoveredReceivers).map(([uuid, receiver]) => ({
-				label: receiver.name || receiver.currentIP,
-				value: uuid
-			}))
-		];
-
-		PI.sendToPropertyInspector({
-			event: "refreshReceiverList",
-			items: receiverList
-		});
-	}
-
-	/**
 	 * Update the status message for an action's PI.
 	 * @param {string} newStatusMsg - The new status message.
 	 */

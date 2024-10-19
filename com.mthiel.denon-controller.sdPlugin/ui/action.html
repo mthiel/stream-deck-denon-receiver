@@ -13,19 +13,6 @@
 			loading="Searching for receivers..." show-refresh="true" oninput="userChoseReceiver()">
 		</sdpi-select>
 	</sdpi-item>
-	<!-- NOTE: May re-use these later for manual entry of receiver details -->
-	<!--
-	<sdpi-item label="Name">
-		<sdpi-textfield id="name" setting="name" placeholder="Living Room"></sdpi-textfield>
-	</sdpi-item>
-	<sdpi-item label="Host">
-		<sdpi-textfield id="host" setting="host" required placeholder="192.168.10.100"
-			oninput="updateConnectButton()"></sdpi-textfield>
-	</sdpi-item>
-	<sdpi-item>
-		<sdpi-button id="connectBtn" onclick="connect()">Connect</sdpi-button>
-	</sdpi-item>
-	-->
 	<sdpi-item label="Status">
 		<sdpi-textfield id="statusMsg" setting="statusMsg" disabled></sdpi-textfield>
 	</sdpi-item>
@@ -33,8 +20,6 @@
 	<sdpi-item label="Volume level" id="volumeLevel" style="display: none;">
 		<sdpi-textfield setting="volumeLevel"></sdpi-textfield>
 	</sdpi-item>
-
-	<div id="debugMessage" style="color: white; display: none;"></div>
 
 	<script>
 		const { streamDeckClient } = SDPIComponents;
@@ -55,7 +40,6 @@
 			const controller = connectionInfo.actionInfo.payload.controller;
 			const actionIdArray = connectionInfo.actionInfo.action.split(".");
 			const actionId = actionIdArray[actionIdArray.length - 1];
-			// document.getElementById('debugMessage').innerText = "DEBUG: " + JSON.stringify(controller);
 
 			switch (actionId) {
 				case "power":
