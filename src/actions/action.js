@@ -7,7 +7,7 @@ import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").DidReceiveSettingsEvent} DidReceiveSettingsEvent */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
-import { DenonAVR } from "../modules/denonavr";
+import { AVRConnection } from "../modules/connection";
 import { AVRTracker } from "../modules/tracker";
 
 /**
@@ -19,7 +19,7 @@ import { AVRTracker } from "../modules/tracker";
 /**
  * @typedef {Object} ConnectedReceiverInfo
  * @property {string} uuid - The UUID of the receiver
- * @property {DenonAVR} connection - The object representing the connected receiver
+ * @property {AVRConnection} connection - The object representing the connected receiver
  */
 
 /**
@@ -200,7 +200,7 @@ export class PluginAction extends SingletonAction {
 			}
 
 			streamDeck.logger.info(`Creating new receiver connection to ${receiverInfo.name}.`);
-			const connection = new DenonAVR(receiverInfo.currentIP);
+			const connection = new AVRConnection(receiverInfo.currentIP);
 			receiver = { uuid: settings.uuid, connection };
 			connectedReceivers.push(receiver);
 
@@ -221,7 +221,7 @@ export class PluginAction extends SingletonAction {
 	/**
 	 * Get the receiver connection for an action.
 	 * @param {Action} action - The action object.
-	 * @returns {Promise<DenonAVR | undefined>} The receiver object or undefined if not found.
+	 * @returns {Promise<AVRConnection | undefined>} The receiver object or undefined if not found.
 	 */
 	async getConnectionForAction(action) {
 		const settings = await action.getSettings();
@@ -264,7 +264,7 @@ export class PluginAction extends SingletonAction {
 
 	/**
 	 * Fires when the receiver's status changes and updates the action's PI status message.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {AVRConnection} receiver - The receiver object.
 	 */
 	onReceiverStatusChange(receiver) {
 		this.updateStatusMessage(receiver.statusMsg);
@@ -272,7 +272,7 @@ export class PluginAction extends SingletonAction {
 
 	/**
 	 * Fires when the receiver connects and updates the action's PI status message.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {AVRConnection} receiver - The receiver object.
 	 */
 	onReceiverConnected(receiver) {
 		this.updateStatusMessage(receiver.statusMsg);
@@ -280,7 +280,7 @@ export class PluginAction extends SingletonAction {
 
 	/**
 	 * Fires when the receiver disconnects and updates the action's PI status message.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {AVRConnection} receiver - The receiver object.
 	 */
 	onReceiverDisconnected(receiver) {
 		this.updateStatusMessage(receiver.statusMsg);
@@ -288,19 +288,19 @@ export class PluginAction extends SingletonAction {
 
 	/**
 	 * Fires when the receiver's power state changes.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {AVRConnection} receiver - The receiver object.
 	 */
 	onReceiverPowerChanged(receiver) {}
 
 	/**
 	 * Fires when the receiver's volume changes.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {AVRConnection} receiver - The receiver object.
 	 */
 	onReceiverVolumeChanged(receiver) {}
 
 	/**
 	 * Fires when the receiver's mute state changes.
-	 * @param {DenonAVR} receiver - The receiver object.
+	 * @param {AVRConnection} receiver - The receiver object.
 	 */
 	onReceiverMuteChanged(receiver) {}
 }

@@ -7,7 +7,7 @@ import { AVRTracker } from "./modules/tracker";
 import { VolumeAction } from "./actions/volume";
 import { PowerAction } from "./actions/power";
 
-/** @typedef {import("./modules/denonavr").DenonAVR} DenonAVR */
+/** @typedef {import("./modules/connection").AVRConnection} AVRConnection */
 
 /**
  * Plugin-level context for actions to access

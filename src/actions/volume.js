@@ -6,7 +6,7 @@ import streamDeck, { action } from "@elgato/streamdeck";
 
 import { PluginAction } from "./action";
 
-import { DenonAVR } from "../modules/denonavr";
+import { AVRConnection } from "../modules/connection";
 
 const images = {
 	unmuted: "imgs/actions/volume/volume2",
@@ -50,7 +50,7 @@ export class VolumeAction extends PluginAction {
 
 	/**
 	 * Handle a receiver volume changing.
-	 * @param {DenonAVR} connection - The receiver connection.
+	 * @param {AVRConnection} connection - The receiver connection.
 	 */
 	onReceiverVolumeChanged(connection) {
 		this.connectedReceivers
@@ -72,7 +72,7 @@ export class VolumeAction extends PluginAction {
 
 	/**
 	 * Handle a receiver mute changing.
-	 * @param {DenonAVR} connection - The receiver connection.
+	 * @param {AVRConnection} connection - The receiver connection.
 	 */
 	onReceiverMuteChanged(connection) {
 		this.connectedReceivers

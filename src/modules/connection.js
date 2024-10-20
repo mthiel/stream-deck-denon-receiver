@@ -8,7 +8,7 @@ import streamDeck from "@elgato/streamdeck";
 /**
  * Represents a connection to a Denon AVR receiver
  */
-export class DenonAVR {
+export class AVRConnection {
 	/**
 	 * Whether the receiver is powered on
 	 * @type {boolean}

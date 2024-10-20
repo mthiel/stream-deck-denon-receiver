@@ -4,7 +4,7 @@ import streamDeck, { action } from "@elgato/streamdeck";
 import { PluginAction } from "./action";
 /** @typedef {import("./action").VisibleAction} VisibleAction */
 
-/** @typedef {import("../modules/denonavr").DenonAVR} DenonAVR */
+/** @typedef {import("../modules/connection").AVRConnection} AVRConnection */
 
 /**
  * The Power action class.
@@ -27,7 +27,7 @@ export class PowerAction extends PluginAction {
 	/**
 	 * Handle a receiver power changing.
 	 * @override
-	 * @param {DenonAVR} connection - The receiver connection.
+	 * @param {AVRConnection} connection - The receiver connection.
 	 */
 	onReceiverPowerChanged(connection) {
 		this.connectedReceivers
