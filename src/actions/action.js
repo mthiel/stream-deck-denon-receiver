@@ -4,114 +4,100 @@ import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
 /** @typedef {import("@elgato/streamdeck").WillDisappearEvent} WillDisappearEvent */
 /** @typedef {import("@elgato/streamdeck").PropertyInspectorDidAppearEvent} PropertyInspectorDidAppearEvent */
-/** @typedef {import("@elgato/streamdeck").DidReceiveSettingsEvent} DidReceiveSettingsEvent */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
+
+/** @typedef {import("../plugin").PluginContext} PluginContext */
+/** @typedef {import("../modules/connection").ReceiverEvent} ReceiverEvent */
 
 import { AVRConnection } from "../modules/connection";
 import { AVRTracker } from "../modules/tracker";
 
-/**
- * @typedef {Object} VisibleAction
- * @property {string} id - The ID of the action.
- * @property {string} uuid - The UUID of the associated receiver
- */
+/** @typedef {string} ActionUUID */
+/** @typedef {string} ReceiverUUID */
+/** @typedef {Record<ActionUUID, ReceiverUUID>} ActionReceiverMap */
 
 /**
- * @typedef {Object} ConnectedReceiverInfo
- * @property {string} uuid - The UUID of the receiver
- * @property {AVRConnection} connection - The object representing the connected receiver
- */
-
-/**
- * Generic action class for the StreamDeck plugin
+ * Base action class for the plugin
  * @extends SingletonAction
- * @property {ConnectedReceiverInfo[]} connectedReceivers - The list of receivers that these actions are connected to.
  */
-
-/** @type {ConnectedReceiverInfo[]} */
-var connectedReceivers = [];
-
-/** @type {VisibleAction[]} */
-var visibleActions = [];
-
 export class PluginAction extends SingletonAction {
-	// Plugin-level context
-	/** @type {import("../plugin").PluginContext} */
-	plugin;
+	/** @type {PluginContext} - Plugin-level context */
+	static plugin;
 
-	get connectedReceivers() {
-		return connectedReceivers;
-	}
-
-	get visibleActions() {
-		return visibleActions;
-	}
+	get avrConnections() { return PluginAction.plugin.avrConnections; }
 
 	/**
-	 * @param {import("../plugin").PluginContext} plugin 
+	 * Map of actions to their associated receiver UUIDs.
+	 * Note: This is also used as a list of connections that this class instance is already listening to.
+	 * @type {ActionReceiverMap}
+	 */
+	actionReceiverMap = {};
+
+	/**
+	 * @param {PluginContext} plugin - Plugin-level context to bind to this class
 	 */
 	constructor(plugin) {
 		super();
 
-		this.plugin = plugin;
-	}
-
-	/**
-	 * Handle the PI appearing by refreshing data
-	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
-	 */
-	onPropertyInspectorDidAppear(ev) {
-		// Refresh the connection status message for the action
-		this.getConnectionForAction(ev.action).then((connection) => {
-			let statusMsg = "";
-			if (connection) {
-				statusMsg = connection.statusMsg;
-			}
-			this.updateStatusMessage(statusMsg);
-		});
-	}
-
-	/**
-	 * Handles checking if an appearing action has a receiver selected already and
-	 * tries to re-associate or re-connect to it.
-	 * @param {WillAppearEvent} ev - The event object.
-	 */
-	onWillAppear(ev) {
-		// Check for a UUID of a selected receiver
-		const uuid = ev.payload.settings.uuid;
-		if (uuid) {
-			// Should we wait for the receiver list to be updated?
-			if (Object.keys(AVRTracker.getReceivers()).length === 0 && AVRTracker.isScanning()) {
-				// Wait for the scan to complete and try again
-				AVRTracker.once("scanned", () => this.onWillAppear(ev));
-				return;
-			}
-
-			// Check for an existing connection to associate with
-			let receiver = connectedReceivers.find((receiver) => receiver.uuid === uuid);
-			if (receiver) {
-				// (Re)associate this action with the existing connection
-				this.associateActionWithReceiver(ev.action, receiver);
-			} else {
-				// Start a connection process and associate it if it completes successfully
-				this.connectReceiver(ev)
-				.then((receiver) => {
-					if (receiver) this.associateActionWithReceiver(ev.action, receiver);
-				});
-			}
+		// Assign the plugin context to the class, if it wasn't already
+		if (!PluginAction.plugin) {
+			PluginAction.plugin = plugin;
 		}
 	}
 
 	/**
-	 * Handles updating states when an action will no longer be visible
-	 * @param {WillDisappearEvent} ev - The event object.
+	 * Handle the PI appearing
+	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
 	 */
-	onWillDisappear(ev) {
-		this.disassociateActionFromReceiver(ev.action);
+	onPropertyInspectorDidAppear(ev) {
+		// Clear the status message
+		let statusMsg = "";
+		if (ev.action.id in this.actionReceiverMap) {
+			statusMsg = this.avrConnections[this.actionReceiverMap[ev.action.id]]?.statusMsg || "";
+		}
+
+		this.updateStatusMessage(statusMsg);
 	}
 
 	/**
-	 * Handle a events from the Property Inspector.
+	 * Handles checking if an appearing action has a receiver selected already and
+	 * attempts to put it in the correct state.
+	 * @param {WillAppearEvent} ev - The event object.
+	 */
+	async onWillAppear(ev) {
+		// Check for a selected receiver for this action.
+		const receiverId = ev.payload.settings.uuid?.toString();
+		if (!receiverId) {
+			// No receiver selected, ignore it until one is chosen
+			return;
+		}
+
+		// If a connection doesn't exist yet, try to create one
+		if (receiverId in this.avrConnections === false) {
+			// Should we wait for the tracker to be updated first?
+			if (AVRTracker.isScanning()) {
+				// Wait for the scan to complete and try again in case the receiver was found
+				AVRTracker.once("scanned", () => this.onWillAppear(ev));
+				return;
+			}
+
+			// Try to open the new connection to this receiver
+			if (await this.connectReceiver(receiverId) === undefined) {
+				return;
+			}
+		}
+
+		// Add listener for receiver events if we haven't already
+		if (Object.values(this.actionReceiverMap).includes(receiverId) === false) {
+			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this));
+		}
+
+		// Update the map with the selected receiver ID for this action
+		this.actionReceiverMap[ev.action.id] = receiverId;
+	}
+
+	/**
+	 * Handle events from the Property Inspector.
 	 * @param {SendToPluginEvent} ev - The event object.
 	 */
 	onSendToPlugin(ev) {
@@ -119,11 +105,7 @@ export class PluginAction extends SingletonAction {
 
 		switch (event) {
 			case "userChoseReceiver":
-				this.connectReceiver(ev).then((receiver) => {
-					if (receiver) {
-						this.associateActionWithReceiver(ev.action, receiver);
-					}
-				});
+				this.onUserChoseReceiver(ev);
 				break;
 			case "refreshReceiverList":
 				this.onRefreshReceiversForPI(ev);
@@ -131,6 +113,18 @@ export class PluginAction extends SingletonAction {
 			default:
 				streamDeck.logger.warn(`Received unknown event: ${event}`);
 		}
+	}
+
+	/**
+	 * Handle a user choosing a receiver from the PI.
+	 * @param {SendToPluginEvent} ev - The event object.
+	 */
+	async onUserChoseReceiver(ev) {
+		const settings = await ev.action.getSettings();
+
+		// Connect to the receiver if the user chose one
+		this.actionReceiverMap[ev.action.id] = settings.uuid;
+		this.connectReceiver(settings.uuid);
 	}
 
 	/**
@@ -174,78 +168,55 @@ export class PluginAction extends SingletonAction {
 
 	/**
 	 * Create a new receiver connection (if necessary) and return it.
-	 * @param {WillAppearEvent | SendToPluginEvent} ev - The event object.
-	 * @returns {Promise<ConnectedReceiverInfo | undefined>} The receiver object or undefined in case of error.
+	 * @param {string} receiverId - The receiver UUID.
+	 * @returns {Promise<AVRConnection | undefined>}
 	 */
-	async connectReceiver(ev) {
-		let settings = ev.payload?.settings;
-		if (!settings) {
-			settings = await ev.action.getSettings();
-		}
-
-		// If no receiver is selected, don't try to connect
-		if (!settings.uuid) {
-			this.updateStatusMessage("No receiver selected.");
-			return;
-		}
-
-		// Check for an existing connection
-		let receiver = connectedReceivers.find((receiver) => receiver.uuid === settings.uuid);
-		if (!receiver) {
+	async connectReceiver(receiverId) {
+		// Check for an existing connection before creating a new one
+		if (receiverId in this.avrConnections === false) {
 			// Get the receiver info from the tracker
-			const receiverInfo = AVRTracker.getReceivers()[settings.uuid];
+			const receiverInfo = AVRTracker.getReceivers()[receiverId];
 			if (!receiverInfo) {
-				this.updateStatusMessage(`Receiver ${settings.name} not found.`);
+				this.updateStatusMessage(`Receiver with UUID ${receiverId} not found on the network.`);
 				return;
 			}
 
 			streamDeck.logger.info(`Creating new receiver connection to ${receiverInfo.name}.`);
-			const connection = new AVRConnection(receiverInfo.currentIP);
-			receiver = { uuid: settings.uuid, connection };
-			connectedReceivers.push(receiver);
-
-			// Add event listeners for receiver events
-			connection.on("status", (ev) => { this.onReceiverStatusChange(ev); });
-			connection.on("connected", (ev) => { this.onReceiverConnected(ev); });
-			connection.on("closed", (ev) => { this.onReceiverDisconnected(ev); });
-			connection.on("powerChanged", (ev) => { this.onReceiverPowerChanged(ev); });
-			connection.on("volumeChanged", (ev) => { this.onReceiverVolumeChanged(ev); });
-			connection.on("muteChanged", (ev) => { this.onReceiverMuteChanged(ev); });
+			const connection = new AVRConnection(receiverId, receiverInfo.currentIP);
+			this.avrConnections[receiverId] = connection;
 		}
 
-		this.updateStatusMessage(receiver.connection.statusMsg);
-
-		return receiver;
+		return this.avrConnections[receiverId];
 	}
 
 	/**
-	 * Get the receiver connection for an action.
-	 * @param {Action} action - The action object.
-	 * @returns {Promise<AVRConnection | undefined>} The receiver object or undefined if not found.
+	 * Route a receiver event to the appropriate handler.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	async getConnectionForAction(action) {
-		const settings = await action.getSettings();
-		return connectedReceivers.find((receiver) => receiver.uuid === settings.uuid)?.connection;
-	}
+	routeReceiverEvent(ev) {
+		// Get the list of actions to inform of the event and add them to the event object
+		ev.actions = this.actions.filter((action) => this.actionReceiverMap[action.id] === ev.connection.uuid);
 
-	/**
-	 * Associate an action with a receiver connection.
-	 * @param {Action} action - The action object.
-	 * @param {ConnectedReceiverInfo} receiver - The receiver object.
-	 */
-	associateActionWithReceiver(action, receiver) {
-		// Remove any existing visible actions with the same ID
-		visibleActions = visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
-		// Add this visible action
-		visibleActions.push({ id: action.id, uuid: receiver.uuid });
-	}
-
-	/**
-	 * Remove a visible action from the list of visible actions.
-	 * @param {Action | ActionContext} action - The action object.
-	 */
-	disassociateActionFromReceiver(action) {
-		visibleActions = visibleActions.filter((visibleAction) => visibleAction.id !== action.id);
+		switch (ev.type) {
+			case "connected":
+				this.onReceiverConnected(ev);
+				break;
+			case "closed":
+				this.onReceiverDisconnected(ev);
+				break;
+			case "powerChanged":
+				this.onReceiverPowerChanged(ev);
+				break;
+			case "volumeChanged":
+				this.onReceiverVolumeChanged(ev);
+				break;
+			case "muteChanged":
+				this.onReceiverMuteChanged(ev);
+				break;
+			case "status":
+				this.onReceiverStatusChange(ev);
+				break;
+		}
 	}
 
 	/**
@@ -264,43 +235,43 @@ export class PluginAction extends SingletonAction {
 
 	/**
 	 * Fires when the receiver's status changes and updates the action's PI status message.
-	 * @param {AVRConnection} receiver - The receiver object.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverStatusChange(receiver) {
-		this.updateStatusMessage(receiver.statusMsg);
+	onReceiverStatusChange(ev) {
+		this.updateStatusMessage(ev.connection.statusMsg);
 	}
 
 	/**
 	 * Fires when the receiver connects and updates the action's PI status message.
-	 * @param {AVRConnection} receiver - The receiver object.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverConnected(receiver) {
-		this.updateStatusMessage(receiver.statusMsg);
+	onReceiverConnected(ev) {
+		this.updateStatusMessage(ev.connection.statusMsg);
 	}
 
 	/**
 	 * Fires when the receiver disconnects and updates the action's PI status message.
-	 * @param {AVRConnection} receiver - The receiver object.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverDisconnected(receiver) {
-		this.updateStatusMessage(receiver.statusMsg);
+	onReceiverDisconnected(ev) {
+		this.updateStatusMessage(ev.connection.statusMsg);
 	}
 
 	/**
 	 * Fires when the receiver's power state changes.
-	 * @param {AVRConnection} receiver - The receiver object.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverPowerChanged(receiver) {}
+	onReceiverPowerChanged(ev) {}
 
 	/**
 	 * Fires when the receiver's volume changes.
-	 * @param {AVRConnection} receiver - The receiver object.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverVolumeChanged(receiver) {}
+	onReceiverVolumeChanged(ev) {}
 
 	/**
 	 * Fires when the receiver's mute state changes.
-	 * @param {AVRConnection} receiver - The receiver object.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverMuteChanged(receiver) {}
+	onReceiverMuteChanged(ev) {}
 }

@@ -5,6 +5,15 @@ import { setTimeout } from "timers/promises";
 import { TelnetSocket } from "telnet-stream";
 import streamDeck from "@elgato/streamdeck";
 
+/** @typedef {import("./tracker").ReceiverInfo} ReceiverInfo */
+
+/**
+ * @typedef {Object} ReceiverEvent
+ * @property {"connected" | "closed" | "powerChanged" | "volumeChanged" | "muteChanged" | "status"} type - The type of event.
+ * @property {AVRConnection} connection - The receiver connection.
+ * @property {Object} [actions] - The actions to inform of the event.
+ */
+
 /**
  * Represents a connection to a Denon AVR receiver
  */
@@ -71,11 +80,20 @@ export class AVRConnection {
 	get host() { return this.#host; }
 
 	/**
-	 * Create a new DenonAVR instance and attempt to connect to the receiver
-	 * @param {string} host - The host to connect to
+	 * The UUID of the receiver
+	 * @type {string}
 	 */
-	constructor(host) {
+	#uuid;
+	get uuid() { return this.#uuid; }
+
+	/**
+	 * Create a new DenonAVR instance and attempt to connect to the receiver
+	 * @param {string} uuid - The UUID of the receiver on the network
+	 * @param {string} host - The IP address of the receiver to connect to
+	 */
+	constructor(uuid, host) {
 		this.#host = host;
+		this.#uuid = uuid;
 		this.connect();
 	}
 
@@ -226,12 +244,25 @@ export class AVRConnection {
 	/** @typedef {(...args: any[]) => void} EventListener */
 
 	/**
-	 * Subscribe to an event from this receiver
-	 * @param {string} eventName - The name of the event to subscribe to
+	 * Subscribe to events from this receiver
 	 * @param {EventListener} listener - The listener function to call when the event is emitted
 	 */
-	on(eventName, listener) {
-		this.#eventEmitter.on(eventName, listener);
+	on(listener) {
+		if (this.#eventEmitter.listeners("event").includes(listener)) {
+			return;
+		}
+
+		this.#eventEmitter.on("event", listener);
+	}
+
+	/**
+	 * Emit an event from this receiver
+	 * @param {ReceiverEvent["type"]} type - The type of event to emit
+	 */
+	emit(type) {
+		/** @type {ReceiverEvent} */
+		const payload = { type, connection: this };
+		this.#eventEmitter.emit("event", payload);
 	}
 
 	/**
@@ -243,7 +274,7 @@ export class AVRConnection {
 		this.#reconnectCount = 0;
 		this.statusMsg = "Connected.";
 
-		this.#eventEmitter.emit("connected", this);
+		this.emit("connected");
 
 		this.#requestFullReceiverStatus();
 	}
@@ -255,7 +286,7 @@ export class AVRConnection {
 	#onClose(hadError = false) {
 		(hadError ? streamDeck.logger.warn : streamDeck.logger.debug)(`Telnet connection to Denon receiver at ${this.#host} closed${hadError ? " due to error" : ""}.`);
 
-		this.#eventEmitter.emit("closed", this);
+		this.emit("closed");
 
 		// Attempt to reconnect if we haven't given up yet
 		if (this.#telnet && this.#reconnectCount < 10) {
@@ -297,11 +328,20 @@ export class AVRConnection {
 		}
 	}
 
+	/**
+	 * Handle a power changed message from the receiver
+	 * @param {string} parameter - The parameter from the receiver
+	 */
 	#onPowerChanged(parameter) {
-		this.power = parameter == "ON";
+		// The receiver will send "ON" or "STANDBY"
+		// It also repeats the power status at a regular interval, so we don't need to emit an event for every message
+		const newStatus = parameter === "ON";
+		if (newStatus === this.power) return;
+
+		this.power = newStatus;
 		streamDeck.logger.debug(`Updated receiver power status for ${this.#host}: ${this.power}`);
 
-		this.#eventEmitter.emit("powerChanged", this);
+		this.emit("powerChanged");
 	}
 
 	#onVolumeChanged(parameter) {
@@ -319,7 +359,7 @@ export class AVRConnection {
 			this.maxVolume = newMaxVolume;
 			streamDeck.logger.debug(`Updated receiver max volume for ${this.#host}: ${this.maxVolume}`);
 
-			this.#eventEmitter.emit("maxVolumeChanged", this);
+			// this.emit("maxVolumeChanged");
 		} else {
 			let newVolume = parseInt(parameter);
 			if (parameter.length === 3) {
@@ -329,7 +369,7 @@ export class AVRConnection {
 			this.volume = newVolume;
 			streamDeck.logger.debug(`Updated receiver volume for ${this.#host}: ${this.volume}`);
 
-			this.#eventEmitter.emit("volumeChanged", this);
+			this.emit("volumeChanged");
 		}
 	}
 
@@ -337,7 +377,7 @@ export class AVRConnection {
 		this.muted = parameter == "ON";
 		streamDeck.logger.debug(`Updated receiver mute status for ${this.#host}: ${this.muted}`);
 
-		this.#eventEmitter.emit("muteChanged", this);
+		this.emit("muteChanged");
 	}
 
 	/**
@@ -354,7 +394,7 @@ export class AVRConnection {
 		}
 
 		streamDeck.logger.warn(this.statusMsg);
-		this.#eventEmitter.emit("status", this);
+		this.emit("status");
 	}
 
 	/**

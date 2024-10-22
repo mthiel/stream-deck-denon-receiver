@@ -3,10 +3,13 @@ import streamDeck, { action } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 /** @typedef {import("@elgato/streamdeck").DialRotateEvent} DialRotateEvent */
 /** @typedef {import("@elgato/streamdeck").DialDownEvent} DialDownEvent */
+/** @typedef {import("@elgato/streamdeck").KeyDownEvent} KeyDownEvent */
 
 import { PluginAction } from "./action";
 
-import { AVRConnection } from "../modules/connection";
+/** @typedef {import("@elgato/streamdeck").Action} Action */
+/** @typedef {import("../modules/connection").AVRConnection} AVRConnection */
+/** @typedef {import("../modules/connection").ReceiverEvent} ReceiverEvent */
 
 const images = {
 	unmuted: "imgs/actions/volume/volume2",
@@ -19,15 +22,22 @@ const images = {
  */
 @action({ UUID: "com.mthiel.denon-controller.volume" })
 export class VolumeAction extends PluginAction {
+	async onWillAppear(ev) {
+		await super.onWillAppear(ev);
+
+		// Set the initial state of the action based on the receiver's volume & mute status
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		if (connection) {
+			updateActionState(ev.action, connection);
+		}
+	}
+
 	/**
 	 * Adjust the volume when the dial is rotated.
 	 * @param {DialRotateEvent} ev - The event object.
 	 */
 	onDialRotate(ev) {
-		this.getConnectionForAction(ev.action)
-		.then((connection) => {
-			connection?.changeVolume(ev.payload.ticks) || ev.action.showAlert();
-		});
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolume(ev.payload.ticks) || ev.action.showAlert();
 	}
 
 	/**
@@ -35,67 +45,62 @@ export class VolumeAction extends PluginAction {
 	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
-		this.getConnectionForAction(ev.action)
-		.then((connection) => {
-			connection?.toggleMute() || ev.action.showAlert();
-		});
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.toggleMute() || ev.action.showAlert();
 	}
 
+	/**
+	 * Change the volume when the key is pressed.
+	 * @param {KeyDownEvent} ev - The event object.
+	 */
 	onKeyDown(ev) {
-		this.getConnectionForAction(ev.action)
-		.then((connection) => {
-			connection?.changeVolumeAbsolute(ev.payload.settings.volumeLevel) || ev.action.showAlert();
-		});
+		const volumeLevel = /** @type {number} */ (ev.payload.settings.volumeLevel);
+		if (!volumeLevel) {
+			ev.action.showAlert();
+			return;
+		}
+
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolumeAbsolute(volumeLevel) || ev.action.showAlert();
 	}
 
 	/**
 	 * Handle a receiver volume changing.
-	 * @param {AVRConnection} connection - The receiver connection.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverVolumeChanged(connection) {
-		this.connectedReceivers
-		.filter((receiver) => receiver.connection === connection)
-		.forEach((receiver) => {
-			this.visibleActions
-			.filter((visibleAction) => visibleAction.uuid === receiver.uuid)
-			.forEach((visibleAction) => {
-				const action = streamDeck.actions.getActionById(visibleAction.id);
-				action?.isDial() && action.setFeedback({
-					indicator: {
-						value: (connection.volume / connection.maxVolume) * 100
-					},
-					value: `Vol: ${connection.volume}`
-				});
-			});
+	onReceiverVolumeChanged(ev) {
+		ev.actions.forEach((action) => {
+			updateActionState(action, ev.connection);
 		});
 	}
 
 	/**
-	 * Handle a receiver mute changing.
-	 * @param {AVRConnection} connection - The receiver connection.
+	 * Handle a receiver mute status changing.
+	 * @param {ReceiverEvent} ev - The event object.
 	 */
-	onReceiverMuteChanged(connection) {
-		this.connectedReceivers
-		.filter((receiver) => receiver.connection === connection)
-		.forEach((receiver) => {
-			this.visibleActions
-			.filter((visibleAction) => visibleAction.uuid === receiver.uuid)
-			.forEach((visibleAction) => {
-				const action = streamDeck.actions.getActionById(visibleAction.id);
-				const { muted, volume, maxVolume } = connection;
-				action?.isDial()
-				&& action.setFeedback({
-					value: muted ? "Muted" : `Vol: ${volume}`,
-					indicator: {
-						value: muted ? 0 : (volume / maxVolume) * 100
-					}
-				})
-				.then(() => {
-					action.setFeedback({
-						icon: muted ? images.muted : images.unmuted
-					});
-				});
-			});
+	onReceiverMuteChanged(ev) {
+		ev.actions.forEach((action) => {
+			updateActionState(action, ev.connection);
+		});
+	}
+}
+
+/**
+ * Update the state of an action based on the receiver's volume & mute status.
+ * @param {Action} action - The action object.
+ * @param {AVRConnection} connection - The receiver connection object.
+ */
+function updateActionState(action, connection) {
+	const { muted, volume, maxVolume } = connection;
+
+	if (action.isDial()) {
+		action.setFeedback({
+			indicator: {
+				value: muted ? 0 : (volume / maxVolume) * 100
+			},
+			value: muted ? "Muted" : `Vol: ${volume}`
+		});
+
+		action.setFeedback({
+			icon: muted ? images.muted : images.unmuted
 		});
 	}
 }
