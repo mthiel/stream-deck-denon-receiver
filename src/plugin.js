@@ -1,7 +1,9 @@
 import streamDeck from "@elgato/streamdeck";
+/** @typedef {import("@elgato/streamdeck").Logger} Logger */
 
-// TODO: Add custom logger, extended from streamDeck.logger
-// streamDeck.logger.setLevel(LogLevel.TRACE);
+const logger = streamDeck.logger.createScope("Plugin");
+// logger.setLevel(LogLevel.TRACE);
+
 import { AVRTracker } from "./modules/tracker";
 
 import { VolumeAction } from "./actions/volume";
@@ -13,13 +15,15 @@ import { PowerAction } from "./actions/power";
  * Plugin-level context for actions to access
  * @typedef {Object} PluginContext
  * @property {Record<ReceiverUUID, AVRConnection>} avrConnections - Maps receiver UUIDs to connections
+ * @property {Logger} logger - Logger instance
  */
 
 /** @typedef {string} ReceiverUUID */
 
 /** @type {PluginContext} */
 const plugin = {
-    avrConnections: {}
+    avrConnections: {},
+    logger
 };
 
 streamDeck.actions.registerAction(new VolumeAction(plugin));

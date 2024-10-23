@@ -22,9 +22,12 @@ import { AVRTracker } from "../modules/tracker";
  */
 export class PluginAction extends SingletonAction {
 	/** @type {PluginContext} - Plugin-level context */
-	static plugin;
+	plugin;
 
-	get avrConnections() { return PluginAction.plugin.avrConnections; }
+	/** @type {Logger} */
+	logger;
+
+	get avrConnections() { return this.plugin.avrConnections; }
 
 	/**
 	 * Map of actions to their associated receiver UUIDs.
@@ -40,8 +43,9 @@ export class PluginAction extends SingletonAction {
 		super();
 
 		// Assign the plugin context to the class, if it wasn't already
-		if (!PluginAction.plugin) {
-			PluginAction.plugin = plugin;
+		if (!this.plugin) {
+			this.plugin = plugin;
+			this.logger = plugin.logger.createScope(this.constructor.name);
 		}
 	}
 
@@ -111,7 +115,7 @@ export class PluginAction extends SingletonAction {
 				this.onRefreshReceiversForPI(ev);
 				break;
 			default:
-				streamDeck.logger.warn(`Received unknown event: ${event}`);
+				this.logger.warn(`Received unknown event: ${event}`);
 		}
 	}
 
@@ -181,8 +185,8 @@ export class PluginAction extends SingletonAction {
 				return;
 			}
 
-			streamDeck.logger.info(`Creating new receiver connection to ${receiverInfo.name}.`);
-			const connection = new AVRConnection(receiverId, receiverInfo.currentIP);
+			this.logger.info(`Creating new receiver connection to ${receiverInfo.name || receiverInfo.currentIP}.`);
+			const connection = new AVRConnection(this.plugin, receiverId, receiverInfo.currentIP);
 			this.avrConnections[receiverId] = connection;
 		}
 

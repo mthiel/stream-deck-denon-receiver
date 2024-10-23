@@ -1,9 +1,9 @@
-import { action } from "@elgato/streamdeck";
+import streamDeck, { action } from "@elgato/streamdeck";
+/** @typedef {import("@elgato/streamdeck").Action} Action */
 /** @typedef {import("@elgato/streamdeck").KeyDownEvent} KeyDownEvent */
 
 import { PluginAction } from "./action";
 
-/** @typedef {import("@elgato/streamdeck").Action} Action */
 /** @typedef {import("../modules/connection").AVRConnection} AVRConnection */
 /** @typedef {import("../modules/connection").ReceiverEvent} ReceiverEvent */
 

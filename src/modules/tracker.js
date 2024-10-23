@@ -1,9 +1,10 @@
 import dgram from "dgram";
+import { EventEmitter } from "events";
 /** @typedef {import("dgram").Socket} Socket */
 /** @typedef {import("dgram").RemoteInfo} RemoteInfo */
-import { EventEmitter } from "events";
 
 import streamDeck from "@elgato/streamdeck";
+/** @typedef {import("@elgato/streamdeck").Logger} Logger */
 
 // TODO: Add HTTP retrieval of receiver description document and parsing for friendly name
 
@@ -28,6 +29,9 @@ const SSDP_SEARCH_TARGET = "urn:schemas-denon-com:device:ACT-Denon:1";
 const SSDP_SEARCH_MX = 3; // 3 seconds
 const SSDP_BROADCAST_INTERVAL = (SSDP_SEARCH_MX) * 1000; // 3000 ms
 const SSDP_BROADCAST_LIMIT = 3; // Number of broadcasts to send before stopping
+
+/** @type {Logger} */
+let logger = streamDeck.logger;
 
 // Prep a udp socket for SSDP/UPnP discovery
 /** @type {Socket} */
@@ -83,18 +87,18 @@ function onResponse(message, rinfo) {
 
 	const usn = headers.USN;
 	if (!usn) {
-		streamDeck.logger.debug(`AVRTracker received a response without a USN from ${rinfo.address}`);
+		logger.debug(`AVRTracker received a response without a USN from ${rinfo.address}`);
 		return;
 	}
 
 	/** @type {UUID} */
 	const uuid = usn.split("::")[0].split("uuid:")[1];
 	if (!uuid) {
-		streamDeck.logger.debug(`AVRTracker received a response with an invalid USN from ${rinfo.address}`);
+		logger.debug(`AVRTracker received a response with an invalid USN from ${rinfo.address}`);
 		return;
 	}
 
-	streamDeck.logger.debug(`AVRTracker received an SSDP response from ${uuid}`);
+	logger.debug(`AVRTracker received an SSDP response from ${uuid}`);
 
 	const isNew = !receiverList[uuid];
 
@@ -118,17 +122,25 @@ function onResponse(message, rinfo) {
  */
 export const AVRTracker = {
 	/**
+	 * Set the logger instance to use
+	 * @param {Logger} newLogger - The new logger instance
+	 */
+	setLogger(newLogger) {
+		logger = newLogger.createScope("AVRTracker");
+	},
+
+	/**
 	 * Initialize the tracker
 	 * @param {() => void} [callback] - An optional callback when the tracker is ready
 	 */
 	listen: (callback = undefined) => {
-		streamDeck.logger.debug("AVRTracker listener initializing...");
+		logger.debug("AVRTracker listener initializing...");
 
 		udpSocket = dgram
 			.createSocket("udp4")
-			.on("listening", () => { streamDeck.logger.debug("AVRTracker udp socket is ready."); })
+			.on("listening", () => { logger.debug("AVRTracker udp socket is ready."); })
 			.on("message", (message, rinfo) => { onResponse(message, rinfo) })
-			.on("error", (error) => { streamDeck.logger.error(`AVRTracker error: ${error}`) })
+			.on("error", (error) => { logger.error(`AVRTracker error: ${error}`) })
 			.bind({}, callback);
 	},
 
@@ -145,7 +157,7 @@ export const AVRTracker = {
 			return receiverList;
 		}
 
-		streamDeck.logger.info("AVRTracker broadcasting a SSDP search for HEOS receivers on the network...");
+		logger.info("AVRTracker broadcasting a SSDP search for HEOS receivers on the network...");
 
 		isScanning = true;
 
@@ -153,7 +165,7 @@ export const AVRTracker = {
 
 		function onUpdate() {
 			const newCount = Object.values(receiverList).filter((r) => r.lastSeen > startTime).length;
-			streamDeck.logger.info(`AVRTracker received ${newCount} new responses while actively searching.`);
+			logger.info(`AVRTracker received ${newCount} new responses while actively searching.`);
 		}
 
 		AVRTracker.on("updated", onUpdate);
@@ -161,7 +173,7 @@ export const AVRTracker = {
 		for (let i = 1; i <= count; i++) {
 			udpSocket.send(createSSDPMessage(maxWait), SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
 
-			streamDeck.logger.info(`AVRTracker sent request ${i} of ${count}. Waiting for replies...`);
+			logger.info(`AVRTracker sent request ${i} of ${count}. Waiting for replies...`);
 
 			await new Promise((resolve) => setTimeout(resolve, maxWait * 1000));
 		}

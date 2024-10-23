@@ -3,8 +3,10 @@ import { EventEmitter } from "events";
 import { setTimeout } from "timers/promises";
 
 import { TelnetSocket } from "telnet-stream";
-import streamDeck from "@elgato/streamdeck";
 
+/** @typedef {import("@elgato/streamdeck").Logger} Logger */
+
+/** @typedef {import("../plugin").PluginContext} PluginContext */
 /** @typedef {import("./tracker").ReceiverInfo} ReceiverInfo */
 
 /**
@@ -18,6 +20,9 @@ import streamDeck from "@elgato/streamdeck";
  * Represents a connection to a Denon AVR receiver
  */
 export class AVRConnection {
+	/** @type {Logger} */
+	logger;
+
 	/**
 	 * Whether the receiver is powered on
 	 * @type {boolean}
@@ -88,10 +93,13 @@ export class AVRConnection {
 
 	/**
 	 * Create a new DenonAVR instance and attempt to connect to the receiver
+	 * @param {PluginContext} plugin - The plugin context to use
 	 * @param {string} uuid - The UUID of the receiver on the network
 	 * @param {string} host - The IP address of the receiver to connect to
 	 */
-	constructor(uuid, host) {
+	constructor(plugin, uuid, host) {
+		this.logger = plugin.logger.createScope(this.constructor.name);
+
 		this.#host = host;
 		this.#uuid = uuid;
 		this.connect();
@@ -101,7 +109,7 @@ export class AVRConnection {
 	 * Connect to a receiver
 	 */
 	async connect() {
-		streamDeck.logger.debug(`Connecting to Denon receiver: ${this.#host}`);
+		this.logger.debug(`Connecting to Denon receiver: ${this.#host}`);
 
 		let rawSocket = net.createConnection(23, this.#host);
 		let telnet = new TelnetSocket(rawSocket);
@@ -171,9 +179,9 @@ export class AVRConnection {
 			}
 
 			telnet.write(command + "\r");
-			streamDeck.logger.debug(`Sent volume command: ${command}`);
+			this.logger.debug(`Sent volume command: ${command}`);
 		} catch (error) {
-			streamDeck.logger.error(`Error sending volume command: ${error.message}`);
+			this.logger.error(`Error sending volume command: ${error.message}`);
 			return false;
 		}
 
@@ -192,9 +200,9 @@ export class AVRConnection {
 		try {
 			let command = `MV${value.toString().padStart(2, "0")}`;
 			telnet.write(command + "\r");
-			streamDeck.logger.debug(`Sent volume command: ${command}`);
+			this.logger.debug(`Sent volume command: ${command}`);
 		} catch (error) {
-			streamDeck.logger.error(`Error sending volume command: ${error.message}`);
+			this.logger.error(`Error sending volume command: ${error.message}`);
 			return false;
 		}
 
@@ -213,9 +221,9 @@ export class AVRConnection {
 			let command = `MU${this.muted ? "OFF" : "ON"}`;
 
 			telnet.write(command + "\r");
-			streamDeck.logger.debug(`Sent mute command: ${command}`);
+			this.logger.debug(`Sent mute command: ${command}`);
 		} catch (error) {
-			streamDeck.logger.error(`Error sending mute command: ${error.message}`);
+			this.logger.error(`Error sending mute command: ${error.message}`);
 			return false;
 		}
 
@@ -269,7 +277,7 @@ export class AVRConnection {
 	 * Handle connection events
 	 */
 	#onConnect() {
-		streamDeck.logger.debug(`Telnet connection established to Denon receiver at ${this.#host}`);
+		this.logger.debug(`Telnet connection established to Denon receiver at ${this.#host}`);
 
 		this.#reconnectCount = 0;
 		this.statusMsg = "Connected.";
@@ -284,7 +292,7 @@ export class AVRConnection {
 	 * @param {boolean} [hadError=false] - Whether the connection was closed due to an error.
 	 */
 	#onClose(hadError = false) {
-		(hadError ? streamDeck.logger.warn : streamDeck.logger.debug)(`Telnet connection to Denon receiver at ${this.#host} closed${hadError ? " due to error" : ""}.`);
+		(hadError ? this.logger.warn : this.logger.debug)(`Telnet connection to Denon receiver at ${this.#host} closed${hadError ? " due to error" : ""}.`);
 
 		this.emit("closed");
 
@@ -293,7 +301,7 @@ export class AVRConnection {
 			this.#reconnectCount++;
 
 			setTimeout(1000).then(() => {
-				streamDeck.logger.debug(`Trying to reconnect to Denon receiver at ${this.#host}. Attempt ${this.#reconnectCount}`);
+				this.logger.debug(`Trying to reconnect to Denon receiver at ${this.#host}. Attempt ${this.#reconnectCount}`);
 				this.connect();
 			});
 		}
@@ -322,7 +330,7 @@ export class AVRConnection {
 					this.#onMuteChanged(parameter);
 					break;
 				default:
-					streamDeck.logger.warn(`Unhandled message from receiver at ${this.#host}: ${line}`);
+					this.logger.warn(`Unhandled message from receiver at ${this.#host}: ${line}`);
 					break;
 			}
 		}
@@ -339,7 +347,7 @@ export class AVRConnection {
 		if (newStatus === this.power) return;
 
 		this.power = newStatus;
-		streamDeck.logger.debug(`Updated receiver power status for ${this.#host}: ${this.power}`);
+		this.logger.debug(`Updated receiver power status for ${this.#host}: ${this.power}`);
 
 		this.emit("powerChanged");
 	}
@@ -357,7 +365,7 @@ export class AVRConnection {
 			}
 
 			this.maxVolume = newMaxVolume;
-			streamDeck.logger.debug(`Updated receiver max volume for ${this.#host}: ${this.maxVolume}`);
+			this.logger.debug(`Updated receiver max volume for ${this.#host}: ${this.maxVolume}`);
 
 			// this.emit("maxVolumeChanged");
 		} else {
@@ -367,7 +375,7 @@ export class AVRConnection {
 			}
 
 			this.volume = newVolume;
-			streamDeck.logger.debug(`Updated receiver volume for ${this.#host}: ${this.volume}`);
+			this.logger.debug(`Updated receiver volume for ${this.#host}: ${this.volume}`);
 
 			this.emit("volumeChanged");
 		}
@@ -375,7 +383,7 @@ export class AVRConnection {
 
 	#onMuteChanged(parameter) {
 		this.muted = parameter == "ON";
-		streamDeck.logger.debug(`Updated receiver mute status for ${this.#host}: ${this.muted}`);
+		this.logger.debug(`Updated receiver mute status for ${this.#host}: ${this.muted}`);
 
 		this.emit("muteChanged");
 	}
@@ -393,7 +401,7 @@ export class AVRConnection {
 			this.statusMsg = `Connection error: ${error.message} (${error.code})`;
 		}
 
-		streamDeck.logger.warn(this.statusMsg);
+		this.logger.warn(this.statusMsg);
 		this.emit("status");
 	}
 

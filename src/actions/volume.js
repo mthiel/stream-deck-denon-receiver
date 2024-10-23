@@ -1,4 +1,5 @@
 import streamDeck, { action } from "@elgato/streamdeck";
+/** @typedef {import("@elgato/streamdeck").Action} Action */
 /** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 /** @typedef {import("@elgato/streamdeck").DialRotateEvent} DialRotateEvent */
@@ -7,7 +8,6 @@ import streamDeck, { action } from "@elgato/streamdeck";
 
 import { PluginAction } from "./action";
 
-/** @typedef {import("@elgato/streamdeck").Action} Action */
 /** @typedef {import("../modules/connection").AVRConnection} AVRConnection */
 /** @typedef {import("../modules/connection").ReceiverEvent} ReceiverEvent */
 
