@@ -20,6 +20,13 @@
 	<sdpi-item label="Volume level" id="volumeLevel" style="display: none;">
 		<sdpi-textfield setting="volumeLevel" placeholder="0-85" required></sdpi-textfield>
 	</sdpi-item>
+	<sdpi-item label="Action" id="powerAction" style="display: none;">
+		<sdpi-select setting="powerAction" label="Power">
+			<option value="toggle">Toggle</option>
+			<option value="on">On</option>
+			<option value="off">Off</option>
+		</sdpi-select>
+	</sdpi-item>
 
 	<script>
 		const { streamDeckClient } = SDPIComponents;
@@ -44,6 +51,8 @@
 			switch (actionId) {
 				case "power":
 					document.title = "Denon Controller - Power";
+					document.getElementById('moreSettingsDivider').style.removeProperty('display');
+					document.getElementById('powerAction').style.removeProperty('display');
 					break;
 				case "volume":
 					document.title = "Denon Controller - Volume";

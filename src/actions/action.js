@@ -1,5 +1,6 @@
 import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").Action} Action */
+/** @typedef {import("@elgato/streamdeck").Logger} Logger */
 /** @typedef {import("@elgato/streamdeck").ActionContext} ActionContext */
 /** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
 /** @typedef {import("@elgato/streamdeck").WillDisappearEvent} WillDisappearEvent */

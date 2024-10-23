@@ -28,9 +28,23 @@ export class PowerAction extends PluginAction {
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
-		// TODO: Make options for explicit on/off vs. toggle
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		if (!connection) return;
 
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.togglePower() || ev.action.showAlert();
+		ev.action.getSettings()
+		.then((settings) => {
+			switch (settings.powerAction) {
+				case "toggle":
+					connection.setPower() || ev.action.showAlert();
+					break;
+				case "on":
+					connection.setPower(true) || ev.action.showAlert();
+					break;
+				case "off":
+					connection.setPower(false) || ev.action.showAlert();
+					break;
+			}
+		});
 	}
 
 	/**

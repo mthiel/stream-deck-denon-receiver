@@ -231,21 +231,20 @@ export class AVRConnection {
 	}
 
 	/**
-	 * Toggle the power state
+	 * Set the power state
+	 * @param {boolean} [value] - The new power state to set. If not provided, toggle the current state.
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	togglePower() {
+	setPower(value) {
 		let telnet = this.#telnet;
 		if (!telnet) return false;
 
-		try {
-			let command = `PW${this.power ? "STANDBY" : "ON"}`;
-			telnet.write(command + "\r");
-			streamDeck.logger.debug(`Sent power command: ${command}`);
-		} catch (error) {
-			streamDeck.logger.error(`Error sending power command: ${error.message}`);
-			return false;
-		}
+		if (value === undefined) value = !this.power;
+
+		let command = `PW${value ? "ON" : "STANDBY"}`;
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent power command: ${command}`);
+
 		return true;
 	}
 
