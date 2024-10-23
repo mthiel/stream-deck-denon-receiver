@@ -81,6 +81,16 @@ export class VolumeAction extends PluginAction {
 			updateActionState(action, ev.connection);
 		});
 	}
+
+	/**
+	 * Handle a receiver power status changing, update actions accordingly.
+	 * @param {ReceiverEvent} ev - The event object.
+	 */
+	onReceiverPowerChanged(ev) {
+		ev.actions.forEach((action) => {
+			updateActionState(action, ev.connection);
+		});
+	}
 }
 
 /**
@@ -89,18 +99,21 @@ export class VolumeAction extends PluginAction {
  * @param {AVRConnection} connection - The receiver connection object.
  */
 function updateActionState(action, connection) {
-	const { muted, volume, maxVolume } = connection;
+	const { muted, volume, maxVolume, power } = connection;
 
 	if (action.isDial()) {
 		action.setFeedback({
 			indicator: {
-				value: muted ? 0 : (volume / maxVolume) * 100
+				value: muted || !power ? 0 : (volume / maxVolume) * 100
 			},
-			value: muted ? "Muted" : `Vol: ${volume}`
+			value: !power ? "Off" :
+				muted ? "Muted" : `Vol: ${volume}`
 		});
 
 		action.setFeedback({
-			icon: muted ? images.muted : images.unmuted
+			icon: muted || !power ? images.muted : images.unmuted
 		});
+	} else if (action.isKey()) {
+		action.setState(muted || !power ? 1 : 0);
 	}
 }

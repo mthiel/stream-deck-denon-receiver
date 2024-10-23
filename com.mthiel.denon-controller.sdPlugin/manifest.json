@@ -21,7 +21,12 @@
 			},
 			"States": [
 				{
+					"Name": "Unmute",
 					"Image": "imgs/actions/volume/volume2"
+				},
+				{
+					"Name": "Mute",
+					"Image": "imgs/actions/volume/volumeMute"
 				}
 			]
 		},
