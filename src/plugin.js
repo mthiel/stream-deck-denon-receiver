@@ -5,6 +5,7 @@ const logger = streamDeck.logger.createScope("Plugin");
 // logger.setLevel(LogLevel.TRACE);
 
 import { AVRTracker } from "./modules/tracker";
+AVRTracker.setLogger(logger);
 
 import { VolumeAction } from "./actions/volume";
 import { PowerAction } from "./actions/power";
