@@ -40,10 +40,20 @@ var udpSocket;
 const emitter = new EventEmitter();
 
 /** @type {ReceiverList} */
-const receiverList = {};
+let receiverList = {};
 
-/** @type {boolean} */
-let isScanning = false;
+/**
+ * The delay timer for writing the receiver list to the settings cache
+ * @type {NodeJS.Timeout | undefined}
+ */
+let cacheWriteTimer;
+
+/**
+ * Whether the tracker is currently scanning for receivers, used to prevent duplicate scans.
+ * Defaults to true to ensure initialization completes before any actions attempt to connect.
+ * @type {boolean}
+ */
+let isScanning = true;
 
 /**
  * Create an SSDP search message
@@ -115,6 +125,41 @@ function onResponse(message, rinfo) {
 	if (isNew) {
 		setImmediate(() => emitter.emit("updated"));
 	}
+
+	updatePersistentCache();
+}
+
+/**
+ * Update the global settings cache with the new receiver details.
+ * This is scheduled to delay a bit to prevent an active scan from making excessive changes to the settings.
+ */
+function updatePersistentCache() {
+	if (cacheWriteTimer) {
+		// If there's already a timer running, clear it so we just delay longer instead of running multiple times.
+		clearTimeout(cacheWriteTimer);
+	}
+
+	// Set the timer to eventually update the global settings cache with the new receiver details.
+	cacheWriteTimer = setTimeout(() => {
+		streamDeck.settings.getGlobalSettings().then((settings) => {
+			settings.receiverList = receiverList;
+			streamDeck.settings.setGlobalSettings(settings)
+			.then(() => {
+				logger.debug("AVRTracker updated the global settings cache with the new receiver details.");
+			})
+			.catch((error) => {
+				logger.error(`AVRTracker failed to update the global settings cache: ${error}`);
+			});
+		});
+	}, 10000); // 10 second delay
+}
+
+async function readFromPersistentCache() {
+	const settings = (await streamDeck.settings.getGlobalSettings());
+
+	if (settings.receiverList) {
+		receiverList = /** @type {ReceiverList} */ (settings.receiverList);
+	}
 }
 
 /**
@@ -131,17 +176,29 @@ export const AVRTracker = {
 
 	/**
 	 * Initialize the tracker
-	 * @param {() => void} [callback] - An optional callback when the tracker is ready
+	 * @returns {Promise<void>}
 	 */
-	listen: (callback = undefined) => {
+	listen: async () => {
 		logger.debug("AVRTracker listener initializing...");
 
 		udpSocket = dgram
 			.createSocket("udp4")
 			.on("listening", () => { logger.debug("AVRTracker udp socket is ready."); })
 			.on("message", (message, rinfo) => { onResponse(message, rinfo) })
-			.on("error", (error) => { logger.error(`AVRTracker error: ${error}`) })
-			.bind({}, callback);
+			.on("error", (error) => { logger.error(`AVRTracker error: ${error}`) });
+
+		await new Promise((resolve) => {
+			udpSocket.bind({}, () => {
+				resolve(undefined);
+			});
+		})
+
+		// Read the receiver list from the global settings cache
+		await readFromPersistentCache();
+
+		// We've retrieved the receiver list from the cache, so we're no longer "scanning"
+		isScanning = false;
+		emitter.emit("scanned");
 	},
 
 	/**
@@ -170,6 +227,7 @@ export const AVRTracker = {
 
 		AVRTracker.on("updated", onUpdate);
 
+		// The broadcast and wait loop
 		for (let i = 1; i <= count; i++) {
 			udpSocket.send(createSSDPMessage(maxWait), SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
 
