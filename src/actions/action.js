@@ -12,10 +12,21 @@ import streamDeck, { SingletonAction } from "@elgato/streamdeck";
 
 import { AVRConnection } from "../modules/connection";
 import { AVRTracker } from "../modules/tracker";
+/** @typedef {import("../modules/tracker").ReceiverList} ReceiverList */
+/** @typedef {import("../modules/tracker").ReceiverInfo} ReceiverInfo */
 
 /** @typedef {string} ActionUUID */
 /** @typedef {string} ReceiverUUID */
 /** @typedef {Record<ActionUUID, ReceiverUUID>} ActionReceiverMap */
+
+/**
+ * @typedef {Object} ActionSettings
+ * @property {string} [uuid] - The receiver UUID to associate with this action
+ * @property {string} [name] - The name of the receiver to display in the PI
+ * @property {string} [statusMsg] - The connection status message to display in the PI
+ * @property {string} [volumeLevel] - The target volume level to set on the receiver
+ * @property {string} [powerAction] - The power action to perform on the receiver
+ */
 
 /**
  * Base action class for the plugin
@@ -55,13 +66,7 @@ export class PluginAction extends SingletonAction {
 	 * @param {PropertyInspectorDidAppearEvent} ev - The event object.
 	 */
 	onPropertyInspectorDidAppear(ev) {
-		// Clear the status message
-		let statusMsg = "";
-		if (ev.action.id in this.actionReceiverMap) {
-			statusMsg = this.avrConnections[this.actionReceiverMap[ev.action.id]]?.statusMsg || "";
-		}
-
-		this.updateStatusMessage(statusMsg);
+		this.syncConnectionStatusToAction();
 	}
 
 	/**
@@ -73,7 +78,8 @@ export class PluginAction extends SingletonAction {
 		// Check for a selected receiver for this action.
 		const receiverId = ev.payload.settings.uuid?.toString();
 		if (!receiverId) {
-			// No receiver selected, ignore it until one is chosen
+			// No receiver selected, clean-up any existing associations
+			delete this.actionReceiverMap[ev.action.id];
 			return;
 		}
 
@@ -125,11 +131,37 @@ export class PluginAction extends SingletonAction {
 	 * @param {SendToPluginEvent} ev - The event object.
 	 */
 	async onUserChoseReceiver(ev) {
+		/** @type {ActionSettings} */
 		const settings = await ev.action.getSettings();
 
-		// Connect to the receiver if the user chose one
-		this.actionReceiverMap[ev.action.id] = settings.uuid;
-		this.connectReceiver(settings.uuid);
+		let statusMsg = "";
+
+		if (settings.uuid) {
+			// Connect to the receiver if the user chose one
+			if (settings.uuid in this.avrConnections === false) {
+				// No connection yet, try to connect to the receiver
+				const connection = await this.connectReceiver(settings.uuid);
+				if (connection !== undefined) {
+					// Add the connection to the map if we were successful
+					this.actionReceiverMap[ev.action.id] = settings.uuid;
+					statusMsg = connection.statusMsg;
+				} else {
+					// If we failed to connect, clear the association
+					delete this.actionReceiverMap[ev.action.id];
+					statusMsg = "Can't find receiver";
+				}
+			} else {
+				// We already have a connection, so just update the receiver map
+				this.actionReceiverMap[ev.action.id] = settings.uuid;
+				statusMsg = this.avrConnections[settings.uuid].statusMsg;
+			}
+		} else {
+			// Ensure the receiver association is cleared if no receiver is selected
+			delete this.actionReceiverMap[ev.action.id];
+			statusMsg = "No receiver selected";
+		}
+
+		this.updateStatusMessage(statusMsg);
 	}
 
 	/**
@@ -137,38 +169,50 @@ export class PluginAction extends SingletonAction {
 	 * @param {SendToPluginEvent} ev 
 	 */
 	async onRefreshReceiversForPI(ev) {
+		/** @type {ReceiverList} */
+		let receivers;
+
+		/** @type {Array<{label: string, value: ReceiverUUID}>} */
 		let options;
 
-		// If this action isn't configured yet, or the user has manally
+		// If this action isn't configured yet, or the user has manually
 		// refreshed, actively attempt to scan for receivers now.
 		const settings = await ev.action.getSettings();
-		if (!settings?.uuid || ev.payload.isRefresh === true) {
+		if (!settings.uuid || ev.payload.isRefresh === true) {
 			// Perform a short scan for receivers
-			const receivers = await AVRTracker.searchForReceivers(1, 2);
-
-			// Convert the dict stricture into options
-			options = [
-				{
-					label: Object.keys(receivers).length > 0
-						? "Select a receiver"
-						: "No receivers detected",
-					value: ""
-				},
-				...Object.entries(receivers).map(([uuid, receiver]) => ({
-					label: receiver.name || receiver.currentIP,
-					value: uuid
-				}))
-			];
+			receivers = await AVRTracker.searchForReceivers(1, 2);
 		} else {
-			// Just send back the current selection to avoid unnecessary
+			// Just send back a mock-up the current selection to avoid unnecessary
 			// scanning every time the user opens the PI
-			options = [{ label: settings.name, value: settings.uuid }];
+			receivers = {
+				[settings.uuid]: {
+					name: settings.name,
+					currentIP: "",
+					lastSeen: 0
+				}
+			};
 		}
+
+		// Convert the dict stricture into options
+		options = [
+			{
+				label: receivers && Object.keys(receivers).length > 0
+					? "Select a receiver"
+					: "No receivers detected",
+				value: ""
+			},
+			...Object.entries(receivers).map(([uuid, receiver]) => ({
+				label: receiver.name || receiver.currentIP,
+				value: uuid
+			}))
+		];
 
 		streamDeck.ui.current?.sendToPropertyInspector({
 			event: "refreshReceiverList",
 			items: options
 		});
+
+		this.syncConnectionStatusToAction();
 	}
 
 	/**
@@ -182,7 +226,6 @@ export class PluginAction extends SingletonAction {
 			// Get the receiver info from the tracker
 			const receiverInfo = AVRTracker.getReceivers()[receiverId];
 			if (!receiverInfo) {
-				this.updateStatusMessage(`Receiver with UUID ${receiverId} not found on the network.`);
 				return;
 			}
 
@@ -236,6 +279,20 @@ export class PluginAction extends SingletonAction {
 				action.setSettings(settings);
 			});
 		}
+	}
+
+	/**
+	 * Sync the connection status to an action's PI.
+	 */
+	syncConnectionStatusToAction() {
+		const action = streamDeck.ui.current?.action;
+		let statusMsg = "";
+
+		if (action && action.id in this.actionReceiverMap) {
+			statusMsg = this.avrConnections[this.actionReceiverMap[action.id]]?.statusMsg || "";
+		}
+
+		this.updateStatusMessage(statusMsg);
 	}
 
 	/**

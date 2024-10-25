@@ -53,8 +53,8 @@ export class VolumeAction extends PluginAction {
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
-		const volumeLevel = /** @type {number} */ (ev.payload.settings.volumeLevel);
-		if (!volumeLevel) {
+		const volumeLevel = parseInt("" + ev.payload.settings.volumeLevel);
+		if (isNaN(volumeLevel)) {
 			ev.action.showAlert();
 			return;
 		}

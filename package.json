@@ -19,6 +19,7 @@
     },
     "dependencies": {
         "@elgato/streamdeck": "^1.0.0",
+        "@xmldom/xmldom": "^0.9.4",
         "telnet-stream": "^1.1.0"
     }
 }

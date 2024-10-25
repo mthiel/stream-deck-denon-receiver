@@ -1,12 +1,11 @@
 import dgram from "dgram";
 import { EventEmitter } from "events";
+import { DOMParser } from "@xmldom/xmldom";
 /** @typedef {import("dgram").Socket} Socket */
 /** @typedef {import("dgram").RemoteInfo} RemoteInfo */
 
 import streamDeck from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").Logger} Logger */
-
-// TODO: Add HTTP retrieval of receiver description document and parsing for friendly name
 
 // TODO: Add support for passively monitoring SSDP NOTIFY messages
 
@@ -121,12 +120,51 @@ function onResponse(message, rinfo) {
 	};
 	receiverList[uuid] = receiver;
 
+	// If we have a description URL, try to get the name from it
+	if (receiver.descriptionURL && !receiver.name) {
+		updateNameFromDescriptionURL(uuid)
+			.then(() => {
+				if (isNew) {
+					emitter.emit("updated");
+				}
+				updatePersistentCache();
+			});
+		return;
+	}
+
 	// Inform listeners if any new receivers were detected
 	if (isNew) {
 		setImmediate(() => emitter.emit("updated"));
 	}
 
 	updatePersistentCache();
+}
+
+async function updateNameFromDescriptionURL(receiverID) {
+	const receiver = receiverList[receiverID];
+	if (!receiver || !receiver.descriptionURL) {
+		return;
+	}
+
+	// Get the name of the receiver from the description URL
+	const response = await fetch(receiver.descriptionURL);
+	if (!response.ok) {
+		// If we couldn't get the description, just clear the URL and move on
+		delete receiver.descriptionURL;
+		logger.debug(`Failed to fetch device description for ${receiverID}: ${response.statusText}`);
+		return;
+	}
+
+	const xmlText = await response.text();
+	const parser = new DOMParser();
+	const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+	const friendlyName = xmlDoc.getElementsByTagName("friendlyName")[0]?.textContent;
+	if (friendlyName) {
+		receiver.name = friendlyName;
+	} else {
+		delete receiver.descriptionURL;
+		logger.debug(`Couldn't find friendlyName in the device description for ${receiverID}`);
+	}
 }
 
 /**
