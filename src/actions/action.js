@@ -24,6 +24,7 @@ import { AVRTracker } from "../modules/tracker";
  * @property {string} [uuid] - The receiver UUID to associate with this action
  * @property {string} [name] - The name of the receiver to display in the PI
  * @property {string} [statusMsg] - The connection status message to display in the PI
+ * @property {string} [zone] - The zone to control on the receiver
  * @property {string} [volumeLevel] - The target volume level to set on the receiver
  * @property {string} [powerAction] - The power action to perform on the receiver
  */
@@ -144,7 +145,7 @@ export class PluginAction extends SingletonAction {
 				if (connection !== undefined) {
 					// Add the connection to the map if we were successful
 					this.actionReceiverMap[ev.action.id] = settings.uuid;
-					statusMsg = connection.statusMsg;
+					statusMsg = connection.status.statusMsg;
 				} else {
 					// If we failed to connect, clear the association
 					delete this.actionReceiverMap[ev.action.id];
@@ -153,7 +154,7 @@ export class PluginAction extends SingletonAction {
 			} else {
 				// We already have a connection, so just update the receiver map
 				this.actionReceiverMap[ev.action.id] = settings.uuid;
-				statusMsg = this.avrConnections[settings.uuid].statusMsg;
+				statusMsg = this.avrConnections[settings.uuid].status.statusMsg;
 			}
 		} else {
 			// Ensure the receiver association is cleared if no receiver is selected
@@ -289,7 +290,7 @@ export class PluginAction extends SingletonAction {
 		let statusMsg = "";
 
 		if (action && action.id in this.actionReceiverMap) {
-			statusMsg = this.avrConnections[this.actionReceiverMap[action.id]]?.statusMsg || "";
+			statusMsg = this.avrConnections[this.actionReceiverMap[action.id]]?.status.statusMsg || "";
 		}
 
 		this.updateStatusMessage(statusMsg);
@@ -300,7 +301,7 @@ export class PluginAction extends SingletonAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverStatusChange(ev) {
-		this.updateStatusMessage(ev.connection.statusMsg);
+		this.updateStatusMessage(ev.connection.status.statusMsg);
 	}
 
 	/**
@@ -308,7 +309,7 @@ export class PluginAction extends SingletonAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverConnected(ev) {
-		this.updateStatusMessage(ev.connection.statusMsg);
+		this.updateStatusMessage(ev.connection.status.statusMsg);
 	}
 
 	/**
@@ -316,7 +317,7 @@ export class PluginAction extends SingletonAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverDisconnected(ev) {
-		this.updateStatusMessage(ev.connection.statusMsg);
+		this.updateStatusMessage(ev.connection.status.statusMsg);
 	}
 
 	/**

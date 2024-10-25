@@ -12,8 +12,23 @@ import { TelnetSocket } from "telnet-stream";
 /**
  * @typedef {Object} ReceiverEvent
  * @property {"connected" | "closed" | "powerChanged" | "volumeChanged" | "muteChanged" | "status"} type - The type of event.
+ * @property {number} [zone] - The zone that the event occurred on.
  * @property {AVRConnection} connection - The receiver connection.
  * @property {Object} [actions] - The actions to inform of the event.
+ */
+
+/**
+ * @typedef {Object} ReceiverZoneStatus
+ * @property {boolean} power - Whether the zone is powered on.
+ * @property {number} volume - The current volume of the zone.
+ * @property {number} maxVolume - The (current) maximum volume of the receiver.
+ * @property {boolean} muted - Whether the zone is muted.
+ */
+
+/**
+ * @typedef {Object} ReceiverStatus
+ * @property {ReceiverZoneStatus[]} zones - The status of each zone.
+ * @property {string} statusMsg - The status message for this connection.
  */
 
 /**
@@ -24,34 +39,26 @@ export class AVRConnection {
 	logger;
 
 	/**
-	 * Whether the receiver is powered on
-	 * @type {boolean}
+	 * The current status of the receiver
+	 * @type {ReceiverStatus}
 	 */
-	power;
-
-	/**
-	 * The maximum volume of the receiver
-	 * @type {number}
-	 */
-	maxVolume = 85;
-
-	/**
-	 * The current volume of the receiver
-	 * @type {number}
-	 */
-	volume;
-
-	/**
-	 * Whether the receiver is muted
-	 * @type {boolean}
-	 */
-	muted;
-
-	/**
-	 * The status message for this instance
-	 * @type {string}
-	 */
-	statusMsg = "Initializing...";
+	status = {
+		zones: [
+			{
+				power: false,
+				volume: 0,
+				maxVolume: 85,
+				muted: false,
+			},
+			{
+				power: false,
+				volume: 0,
+				maxVolume: 85,
+				muted: false,
+			},
+		],
+		statusMsg: "Initializing...",
+	};
 
 	/**
 	 * The event emitter for this instance
@@ -158,21 +165,24 @@ export class AVRConnection {
 	/**
 	 * Change the volume by the given delta
 	 * @param {number} delta - The amount to change the volume by
+	 * @param {number} [zone=0] - The zone to change the volume for
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	changeVolume(delta) {
-		let telnet = this.#telnet;
-		if (!telnet || !this.power || this.volume === undefined) return false;
+	changeVolume(delta, zone = 0) {
+		const telnet = this.#telnet;
+		const status = this.status.zones[zone];
+
+		if (!telnet || !status.power || status.volume === undefined) return false;
 
 		try {
-			let command = "MV";
+			let command = ["MV", "Z2"][zone];
 
 			if (delta === 1) {
 				command += "UP";
 			} else if (delta === -1) {
 				command += "DOWN";
 			} else {
-				let newVolumeStr = Math.max(0, Math.min(this.maxVolume, Math.round(this.volume + delta)))
+				let newVolumeStr = Math.max(0, Math.min(status.maxVolume, Math.round(status.volume + delta)))
 					.toString()
 					.padStart(2, "0");
 				command += newVolumeStr;
@@ -191,14 +201,19 @@ export class AVRConnection {
 	/**
 	 * Change the volume to the given value
 	 * @param {number} value - The new volume value to set
+	 * @param {number} [zone=0] - The zone to change the volume for
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	changeVolumeAbsolute(value) {
-		let telnet = this.#telnet;
-		if (!telnet || !this.power) return false;
+	changeVolumeAbsolute(value, zone = 0) {
+		const telnet = this.#telnet;
+		const status = this.status.zones[zone];
+
+		if (!telnet || !status.power) return false;
 
 		try {
-			let command = `MV${value.toString().padStart(2, "0")}`;
+			let command = ["MV", "Z2"][zone];
+			command += value.toString().padStart(2, "0");
+
 			telnet.write(command + "\r");
 			this.logger.debug(`Sent volume command: ${command}`);
 		} catch (error) {
@@ -211,14 +226,18 @@ export class AVRConnection {
 
 	/**
 	 * Toggle the mute state
+	 * @param {number} [zone=0] - The zone to toggle the mute state for
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	toggleMute() {
-		let telnet = this.#telnet;
-		if (!telnet || !this.power || this.muted === undefined) return false;
+	toggleMute(zone = 0) {
+		const telnet = this.#telnet;
+		const status = this.status.zones[zone];
+
+		if (!telnet || !status.power || status.muted === undefined) return false;
 
 		try {
-			let command = `MU${this.muted ? "OFF" : "ON"}`;
+			let command = ["MU", "Z2MU"][zone];
+			command += status.muted ? "OFF" : "ON";
 
 			telnet.write(command + "\r");
 			this.logger.debug(`Sent mute command: ${command}`);
@@ -233,15 +252,20 @@ export class AVRConnection {
 	/**
 	 * Set the power state
 	 * @param {boolean} [value] - The new power state to set. If not provided, toggle the current state.
+	 * @param {number} [zone=0] - The zone to set the power state for
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	setPower(value) {
-		let telnet = this.#telnet;
+	setPower(value, zone = 0) {
+		const telnet = this.#telnet;
+		const status = this.status.zones[zone];
+
 		if (!telnet) return false;
 
-		if (value === undefined) value = !this.power;
+		if (value === undefined) value = !status.power;
 
-		let command = `PW${value ? "ON" : "STANDBY"}`;
+		let command = ["PW", "Z2"][zone];
+		command += value ? "ON" : ["STANDBY", "OFF"][zone];
+
 		telnet.write(command + "\r");
 		this.logger.debug(`Sent power command: ${command}`);
 
@@ -265,10 +289,11 @@ export class AVRConnection {
 	/**
 	 * Emit an event from this receiver
 	 * @param {ReceiverEvent["type"]} type - The type of event to emit
+	 * @param {ReceiverEvent["zone"]} [zone] - The zone that the event occurred on
 	 */
-	emit(type) {
+	emit(type, zone = 0) {
 		/** @type {ReceiverEvent} */
-		const payload = { type, connection: this };
+		const payload = { type, zone, connection: this };
 		this.#eventEmitter.emit("event", payload);
 	}
 
@@ -279,7 +304,7 @@ export class AVRConnection {
 		this.logger.debug(`Telnet connection established to Denon receiver at ${this.#host}`);
 
 		this.#reconnectCount = 0;
-		this.statusMsg = "Connected.";
+		this.status.statusMsg = "Connected.";
 
 		this.emit("connected");
 
@@ -315,21 +340,33 @@ export class AVRConnection {
 		for (let line of lines) {
 			if (line.length === 0) continue;
 
+			let zone = 0;
+
+			// Zone 2 status messages start with "Z2"
+			if (line.startsWith("Z2")) {
+				zone = 1;
+				line = line.substring(2); // Remove the "Z2" prefix
+
+				// Special parsing for zone 2 due to a lack of "command" portion
+				if (parseInt(line.substring(0, 2)) > 0) line = "MV" + line; // Volume
+				else if (line.startsWith("ON") || line.startsWith("OFF")) line = "PW" + line; // Power
+			}
+
 			let command = line.substring(0, 2);
 			let parameter = line.substring(2);
 
 			switch (command) {
 				case "PW": // Power
-					this.#onPowerChanged(parameter);
+					this.#onPowerChanged(parameter, zone);
 					break;
 				case "MV": // Volume or max volume
-					this.#onVolumeChanged(parameter);
+					this.#onVolumeChanged(parameter, zone);
 					break;
 				case "MU": // Mute
-					this.#onMuteChanged(parameter);
+					this.#onMuteChanged(parameter, zone);
 					break;
 				default:
-					this.logger.warn(`Unhandled message from receiver at ${this.#host}: ${line}`);
+					this.logger.warn(`Unhandled message from receiver at ${this.#host} Z${zone === 0 ? "M" : "2"}: ${line}`);
 					break;
 			}
 		}
@@ -338,20 +375,30 @@ export class AVRConnection {
 	/**
 	 * Handle a power changed message from the receiver
 	 * @param {string} parameter - The parameter from the receiver
+	 * @param {number} [zone=0] - The zone that the power status changed for
 	 */
-	#onPowerChanged(parameter) {
-		// The receiver will send "ON" or "STANDBY"
+	#onPowerChanged(parameter, zone = 0) {
+		const status = this.status.zones[zone];
+
+		// The receiver will send "ON" or "STANDBY" in zone 1, and "ON" or "OFF" in zone 2
 		// It also repeats the power status at a regular interval, so we don't need to emit an event for every message
 		const newStatus = parameter === "ON";
-		if (newStatus === this.power) return;
+		if (newStatus === status.power) return;
 
-		this.power = newStatus;
-		this.logger.debug(`Updated receiver power status for ${this.#host}: ${this.power}`);
+		status.power = newStatus;
+		this.logger.debug(`Updated receiver power status for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.power}`);
 
-		this.emit("powerChanged");
+		this.emit("powerChanged", zone);
 	}
 
-	#onVolumeChanged(parameter) {
+	/**
+	 * Handle a volume changed message from the receiver
+	 * @param {string} parameter - The parameter from the receiver
+	 * @param {number} [zone=0] - The zone that the volume status changed for
+	 */
+	#onVolumeChanged(parameter, zone = 0) {
+		const status = this.status.zones[zone];
+
 		if (parameter.startsWith("MAX")) {
 			// The "MAX" extended command is not documented, but it is used by the receiver
 			// Guessing this is the current maximum volume supported by the receiver
@@ -363,8 +410,8 @@ export class AVRConnection {
 				newMaxVolume = newMaxVolume / 10;
 			}
 
-			this.maxVolume = newMaxVolume;
-			this.logger.debug(`Updated receiver max volume for ${this.#host}: ${this.maxVolume}`);
+			status.maxVolume = newMaxVolume;
+			this.logger.debug(`Updated receiver max volume for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.maxVolume}`);
 
 			// this.emit("maxVolumeChanged");
 		} else {
@@ -373,18 +420,25 @@ export class AVRConnection {
 				newVolume = newVolume / 10;
 			}
 
-			this.volume = newVolume;
-			this.logger.debug(`Updated receiver volume for ${this.#host}: ${this.volume}`);
+			status.volume = newVolume;
+			this.logger.debug(`Updated receiver volume for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.volume}`);
 
-			this.emit("volumeChanged");
+			this.emit("volumeChanged", zone);
 		}
 	}
 
-	#onMuteChanged(parameter) {
-		this.muted = parameter == "ON";
-		this.logger.debug(`Updated receiver mute status for ${this.#host}: ${this.muted}`);
+	/**
+	 * Handle a mute changed message from the receiver
+	 * @param {string} parameter - The parameter from the receiver
+	 * @param {number} [zone=0] - The zone that the mute status changed for
+	 */
+	#onMuteChanged(parameter, zone = 0) {
+		const status = this.status.zones[zone];
 
-		this.emit("muteChanged");
+		status.muted = parameter == "ON";
+		this.logger.debug(`Updated receiver mute status for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.muted}`);
+
+		this.emit("muteChanged", zone);
 	}
 
 	/**
@@ -392,15 +446,17 @@ export class AVRConnection {
 	 * @param {Object} error
 	 */
 	#onError(error) {
+		const status = this.status;
+
 		if (error.code === "ENOTFOUND") {
 			// If the host can't be looked up, give up.
-			this.statusMsg = `Host not found: ${this.#host}`;
+			status.statusMsg = `Host not found: ${this.#host}`;
 			this.disconnect();
 		} else {
-			this.statusMsg = `Connection error: ${error.message} (${error.code})`;
+			status.statusMsg = `Connection error: ${error.message} (${error.code})`;
 		}
 
-		this.logger.warn(this.statusMsg);
+		this.logger.warn(status.statusMsg);
 		this.emit("status");
 	}
 
@@ -412,8 +468,14 @@ export class AVRConnection {
 		const telnet = this.#telnet;
 		if (!telnet) return;
 
+		// Main zone
 		telnet.write("PW?\r"); // Request the power status
 		telnet.write("MV?\r"); // Request the volume
 		telnet.write("MU?\r"); // Request the mute status
+
+		// Zone 2
+		telnet.write("Z2PW?\r"); // Request the power status
+		telnet.write("Z2MV?\r"); // Request the volume
+		telnet.write("Z2MU?\r"); // Request the mute status
 	}
 }

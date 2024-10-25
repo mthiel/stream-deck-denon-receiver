@@ -33,15 +33,17 @@ export class PowerAction extends PluginAction {
 
 		ev.action.getSettings()
 		.then((settings) => {
+			const zone = parseInt("" + settings.zone) || 0;
+
 			switch (settings.powerAction) {
 				case "toggle":
-					connection.setPower() || ev.action.showAlert();
+					connection.setPower(undefined, zone) || ev.action.showAlert();
 					break;
 				case "on":
-					connection.setPower(true) || ev.action.showAlert();
+					connection.setPower(true, zone) || ev.action.showAlert();
 					break;
 				case "off":
-					connection.setPower(false) || ev.action.showAlert();
+					connection.setPower(false, zone) || ev.action.showAlert();
 					break;
 			}
 		});
@@ -52,9 +54,7 @@ export class PowerAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverPowerChanged(ev) {
-		ev.actions.forEach((action) => {
-			updateActionState(action, ev.connection);
-		});
+		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 }
 
@@ -62,9 +62,11 @@ export class PowerAction extends PluginAction {
  * Update the state of an action based on the receiver's power status.
  * @param {Action} action - The action object.
  * @param {AVRConnection} connection - The receiver connection object.
+ * @param {number} [zone=0] - The zone that the power status changed for
  */
-function updateActionState(action, connection) {
-	if (action.isKey()) {
-		action.setState(connection.power ? 0 : 1);
+async function updateActionState(action, connection, zone = 0) {
+	const actionZone = parseInt("" + (await action.getSettings()).zone) || 0;
+	if (action.isKey() && actionZone === zone) {
+		action.setState(connection.status.zones[zone].power ? 0 : 1);
 	}
 }

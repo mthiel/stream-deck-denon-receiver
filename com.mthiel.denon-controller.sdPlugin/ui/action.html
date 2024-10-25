@@ -17,16 +17,26 @@
 		<sdpi-textfield id="statusMsg" setting="statusMsg" disabled></sdpi-textfield>
 	</sdpi-item>
 	<hr id="moreSettingsDivider" style="display: none;" />
-	<sdpi-item label="Volume level" id="volumeLevel" style="display: none;">
-		<sdpi-textfield setting="volumeLevel" placeholder="0-85" required></sdpi-textfield>
-	</sdpi-item>
-	<sdpi-item label="Action" id="powerAction" style="display: none;">
-		<sdpi-select setting="powerAction" label="Power">
-			<option value="toggle">Toggle</option>
-			<option value="on">On</option>
-			<option value="off">Off</option>
+	<sdpi-item id="zoneItem" label="Zone">
+		<sdpi-select setting="zone" label="Zone">
+			<option value="0">Main</option>
+			<option value="1">Zone 2</option>
 		</sdpi-select>
 	</sdpi-item>
+	<div id="volumeAction" style="display: none;">
+		<sdpi-item label="Volume level">
+			<sdpi-textfield setting="volumeLevel" placeholder="0-85" required></sdpi-textfield>
+		</sdpi-item>
+	</div>
+	<div id="powerAction" style="display: none;">
+		<sdpi-item label="Action">
+			<sdpi-select setting="powerAction" label="Power">
+				<option value="toggle">Toggle</option>
+				<option value="on">On</option>
+				<option value="off">Off</option>
+			</sdpi-select>
+		</sdpi-item>
+	</div>
 
 	<script>
 		const { streamDeckClient } = SDPIComponents;
@@ -58,7 +68,7 @@
 					document.title = "Denon Controller - Volume";
 					if (controller === "Keypad") {
 						document.getElementById('moreSettingsDivider').style.removeProperty('display');
-						document.getElementById('volumeLevel').style.removeProperty('display');
+						document.getElementById('volumeAction').style.removeProperty('display');
 					}
 					break;
 				case "source":

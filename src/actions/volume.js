@@ -22,13 +22,18 @@ const images = {
  */
 @action({ UUID: "com.mthiel.denon-controller.volume" })
 export class VolumeAction extends PluginAction {
+	/**
+	 * Handle the will appear event.
+	 * @param {WillAppearEvent} ev - The event object.
+	 */
 	async onWillAppear(ev) {
 		await super.onWillAppear(ev);
 
 		// Set the initial state of the action based on the receiver's volume & mute status
 		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		const zone = parseInt("" + ev.payload.settings.zone) || 0;
 		if (connection) {
-			updateActionState(ev.action, connection);
+			updateActionState(ev.action, connection, zone);
 		}
 	}
 
@@ -37,7 +42,8 @@ export class VolumeAction extends PluginAction {
 	 * @param {DialRotateEvent} ev - The event object.
 	 */
 	onDialRotate(ev) {
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolume(ev.payload.ticks) || ev.action.showAlert();
+		const zone = parseInt("" + ev.payload.settings.zone) || 0;
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolume(ev.payload.ticks, zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -45,7 +51,8 @@ export class VolumeAction extends PluginAction {
 	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.toggleMute() || ev.action.showAlert();
+		const zone = parseInt("" + ev.payload.settings.zone) || 0;
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.toggleMute(zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -59,7 +66,8 @@ export class VolumeAction extends PluginAction {
 			return;
 		}
 
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolumeAbsolute(volumeLevel) || ev.action.showAlert();
+		const zone = parseInt("" + ev.payload.settings.zone) || 0;
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolumeAbsolute(volumeLevel, zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -67,9 +75,7 @@ export class VolumeAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverVolumeChanged(ev) {
-		ev.actions.forEach((action) => {
-			updateActionState(action, ev.connection);
-		});
+		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 
 	/**
@@ -77,9 +83,7 @@ export class VolumeAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverMuteChanged(ev) {
-		ev.actions.forEach((action) => {
-			updateActionState(action, ev.connection);
-		});
+		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 
 	/**
@@ -87,9 +91,7 @@ export class VolumeAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverPowerChanged(ev) {
-		ev.actions.forEach((action) => {
-			updateActionState(action, ev.connection);
-		});
+		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 }
 
@@ -97,9 +99,13 @@ export class VolumeAction extends PluginAction {
  * Update the state of an action based on the receiver's volume & mute status.
  * @param {Action} action - The action object.
  * @param {AVRConnection} connection - The receiver connection object.
+ * @param {number} [zone=0] - The zone that the volume status changed for
  */
-function updateActionState(action, connection) {
-	const { muted, volume, maxVolume, power } = connection;
+async function updateActionState(action, connection, zone = 0) {
+	const actionZone = parseInt("" + (await action.getSettings()).zone) || 0;
+	if (actionZone !== zone) { return; }
+
+	const { muted, volume, maxVolume, power } = connection.status.zones[zone];
 
 	if (action.isDial()) {
 		action.setFeedback({
