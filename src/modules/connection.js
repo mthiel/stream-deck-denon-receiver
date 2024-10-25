@@ -389,6 +389,11 @@ export class AVRConnection {
 		this.logger.debug(`Updated receiver power status for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.power}`);
 
 		this.emit("powerChanged", zone);
+
+		// Request the full status of the receiver if it is powered on
+		if (status.power) {
+			this.#requestFullReceiverStatus();
+		}
 	}
 
 	/**

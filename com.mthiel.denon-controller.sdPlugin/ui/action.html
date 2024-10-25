@@ -24,7 +24,13 @@
 		</sdpi-select>
 	</sdpi-item>
 	<div id="volumeAction" style="display: none;">
-		<sdpi-item label="Volume level">
+		<sdpi-item label="Action">
+			<sdpi-select id="volumeActionSelect" setting="volumeAction" label="Volume" oninput="updateVolumeLevelItem()">
+				<option value="set">Set Volume</option>
+				<option value="mute">Toggle Mute</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item id="volumeLevelItem" label="Volume level">
 			<sdpi-textfield setting="volumeLevel" placeholder="0-85" required></sdpi-textfield>
 		</sdpi-item>
 	</div>
@@ -69,12 +75,26 @@
 					if (controller === "Keypad") {
 						document.getElementById('moreSettingsDivider').style.removeProperty('display');
 						document.getElementById('volumeAction').style.removeProperty('display');
+						updateVolumeLevelItem();
 					}
 					break;
 				case "source":
 					document.title = "Denon Controller - Source";
 					break;
 			}
+		}
+
+		function updateVolumeLevelItem() {
+			setTimeout(() => {
+				const volumeActionSelect = document.getElementById('volumeActionSelect');
+				const volumeLevelItem = document.getElementById('volumeLevelItem');
+				const volumeAction = volumeActionSelect.value;
+				if (volumeAction === "mute") {
+					volumeLevelItem.style.display = 'none';
+				} else {
+					volumeLevelItem.style.display = 'block';
+				}
+			}, 1);
 		}
 
 		setTimeout(() => {

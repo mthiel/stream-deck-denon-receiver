@@ -60,13 +60,20 @@ export class VolumeAction extends PluginAction {
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
+		const zone = parseInt("" + ev.payload.settings.zone) || 0;
+
+		if (ev.payload.settings.volumeAction === "mute") {
+			this.avrConnections[this.actionReceiverMap[ev.action.id]]?.toggleMute(zone) || ev.action.showAlert();
+			return;
+		}
+
+		// Assumes volumeAction is "set"
 		const volumeLevel = parseInt("" + ev.payload.settings.volumeLevel);
 		if (isNaN(volumeLevel)) {
 			ev.action.showAlert();
 			return;
 		}
 
-		const zone = parseInt("" + ev.payload.settings.zone) || 0;
 		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolumeAbsolute(volumeLevel, zone) || ev.action.showAlert();
 	}
 
