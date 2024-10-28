@@ -24,9 +24,12 @@ import { AVRTracker } from "../modules/tracker";
  * @property {string} [uuid] - The receiver UUID to associate with this action
  * @property {string} [name] - The name of the receiver to display in the PI
  * @property {string} [statusMsg] - The connection status message to display in the PI
- * @property {string} [zone] - The zone to control on the receiver
+ * @property {number} [zone] - The zone to control on the receiver
+ * @property {string} [volumeAction] - The volume action to perform on the receiver
  * @property {string} [volumeLevel] - The target volume level to set on the receiver
  * @property {string} [powerAction] - The power action to perform on the receiver
+ * @property {string} [sourceAction] - The source action to perform on the receiver
+ * @property {string} [source] - The source to set on the receiver
  */
 
 /**
@@ -122,8 +125,6 @@ export class PluginAction extends SingletonAction {
 			case "refreshReceiverList":
 				this.onRefreshReceiversForPI(ev);
 				break;
-			default:
-				this.logger.warn(`Received unknown event: ${event}`);
 		}
 	}
 
@@ -171,27 +172,17 @@ export class PluginAction extends SingletonAction {
 	 */
 	async onRefreshReceiversForPI(ev) {
 		/** @type {ReceiverList} */
-		let receivers;
+		let receivers = AVRTracker.getReceivers();
 
 		/** @type {Array<{label: string, value: ReceiverUUID}>} */
 		let options;
 
-		// If this action isn't configured yet, or the user has manually
-		// refreshed, actively attempt to scan for receivers now.
+		// If the user wants a refresh, or if there are no receivers cached,
+		// actively attempt to scan for receivers now.
 		const settings = await ev.action.getSettings();
-		if (!settings.uuid || ev.payload.isRefresh === true) {
+		if (ev.payload.isRefresh === true || (!settings.uuid && Object.keys(receivers).length === 0)) {
 			// Perform a short scan for receivers
 			receivers = await AVRTracker.searchForReceivers(1, 2);
-		} else {
-			// Just send back a mock-up the current selection to avoid unnecessary
-			// scanning every time the user opens the PI
-			receivers = {
-				[settings.uuid]: {
-					name: settings.name,
-					currentIP: "",
-					lastSeen: 0
-				}
-			};
 		}
 
 		// Convert the dict stricture into options

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="40"
+   height="40"
+   viewBox="0 0 40 40"
+   version="1.1"
+   id="svg1"
+   xml:space="preserve"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   sodipodi:docname="source_v2.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="true"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="22.768113"
+     inkscape:cx="21.23584"
+     inkscape:cy="16.448443"
+     inkscape:window-width="2184"
+     inkscape:window-height="1306"
+     inkscape:window-x="175"
+     inkscape:window-y="318"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" /><defs
+     id="defs1" /><g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"><g
+       style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke-width:1.00157;stroke-dasharray:none"
+       id="g1"
+       transform="matrix(2.354833,0,0,2.716122,1.161336,-1.728976)"><path
+         d="M 2.5,7 C 2.22386,7 2,7.22386 2,7.5 2,7.77614 2.22386,8 2.5,8 h 11 C 13.7761,8 14,7.77614 14,7.5 14,7.22386 13.7761,7 13.5,7 Z"
+         fill="#000000"
+         id="path1"
+         style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke-width:1.00157;stroke-dasharray:none" /><path
+         d="M 1,5 C 0.447715,5 0,5.44772 0,6 v 3 c 0,0.55228 0.447715,1 1,1 H 1.29289 L 2,10.7071 C 2.18754,10.8946 2.44189,11 2.70711,11 H 13.2929 C 13.5581,11 13.8125,10.8946 14,10.7071 L 14.7071,10 H 15 c 0.5523,0 1,-0.44772 1,-1 V 6 C 16,5.44771 15.5523,5 15,5 Z M 1,6 H 15 V 9 H 14.7071 C 14.4419,9 14.1875,9.10536 14,9.29289 L 13.2929,10 H 2.70711 L 2,9.29289 C 1.81246,9.10536 1.55811,9 1.29289,9 H 1 Z"
+         fill="#000000"
+         id="path2"
+         style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke-width:1.00157;stroke-dasharray:none" /></g></g></svg>

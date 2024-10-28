@@ -9,6 +9,8 @@ AVRTracker.setLogger(logger);
 
 import { VolumeAction } from "./actions/volume";
 import { PowerAction } from "./actions/power";
+import { SourceAction } from "./actions/source";
+
 
 /** @typedef {import("./modules/connection").AVRConnection} AVRConnection */
 
@@ -29,6 +31,7 @@ const plugin = {
 
 streamDeck.actions.registerAction(new VolumeAction(plugin));
 streamDeck.actions.registerAction(new PowerAction(plugin));
+streamDeck.actions.registerAction(new SourceAction(plugin));
 
 // Connect to the StreamDeck and kick-off the rest of the initialization
 await streamDeck.connect();

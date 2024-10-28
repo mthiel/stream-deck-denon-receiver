@@ -11,7 +11,13 @@ import { TelnetSocket } from "telnet-stream";
 
 /**
  * @typedef {Object} ReceiverEvent
- * @property {"connected" | "closed" | "powerChanged" | "volumeChanged" | "muteChanged" | "status"} type - The type of event.
+ * @property { "connected" 
+ * 			 | "closed"
+ * 			 | "powerChanged"
+ * 			 | "volumeChanged"
+ * 			 | "muteChanged"
+ * 			 | "status"
+ * 			 | "sourceChanged"} type - The type of event.
  * @property {number} [zone] - The zone that the event occurred on.
  * @property {AVRConnection} connection - The receiver connection.
  * @property {Object} [actions] - The actions to inform of the event.
@@ -23,6 +29,7 @@ import { TelnetSocket } from "telnet-stream";
  * @property {number} volume - The current volume of the zone.
  * @property {number} maxVolume - The (current) maximum volume of the receiver.
  * @property {boolean} muted - Whether the zone is muted.
+ * @property {string} source - The current source of the zone.
  */
 
 /**
@@ -30,6 +37,42 @@ import { TelnetSocket } from "telnet-stream";
  * @property {ReceiverZoneStatus[]} zones - The status of each zone.
  * @property {string} statusMsg - The status message for this connection.
  */
+
+const sources = {
+	"PHONO": "",
+	"CD": "",
+	"TUNER": "",
+	"DVD": "",
+	"BD": "Blu-ray",
+	"TV": "TV Audio",
+	"SAT/CBL": "Cable / Satellite",
+	"MPLAY": "Media Player",
+	"GAME": "",
+	"HDRADIO": "",
+	"NET": "Online Music",
+	"PANDORA": "",
+	"SIRIUSXM": "",
+	"SPOTIFY": "",
+	"LASTFM": "",
+	"FLICKR": "",
+	"IRADIO": "",
+	"SERVER": "",
+	"FAVORITES": "",
+	"AUX": "",
+	"AUX1": "",
+	"AUX2": "",
+	"AUX3": "",
+	"AUX4": "",
+	"AUX5": "",
+	"AUX6": "",
+	"AUX7": "",
+	"BT": "",
+	"USB/IPOD": "",
+	"USB": "",
+	"IPD": "",
+	"IRP": "",
+	"FVP": ""
+};
 
 /**
  * Represents a connection to a Denon AVR receiver
@@ -49,12 +92,14 @@ export class AVRConnection {
 				volume: 0,
 				maxVolume: 85,
 				muted: false,
+				source: "",
 			},
 			{
 				power: false,
 				volume: 0,
 				maxVolume: 85,
 				muted: false,
+				source: "",
 			},
 		],
 		statusMsg: "Initializing...",
@@ -97,6 +142,8 @@ export class AVRConnection {
 	 */
 	#uuid;
 	get uuid() { return this.#uuid; }
+
+	static get sources() { return sources; }
 
 	/**
 	 * Create a new DenonAVR instance and attempt to connect to the receiver
@@ -272,6 +319,25 @@ export class AVRConnection {
 		return true;
 	}
 
+	/**
+	 * Set the source of the given zone
+	 * @param {string} value - The source to set
+	 * @param {number} [zone=0] - The zone to set the source for
+	 * @returns {boolean} Whether the command was sent successfully
+	 */
+	setSource(value, zone = 0) {
+		const telnet = this.#telnet;
+		if (!telnet || !value) return false;
+
+		let command = ["SI", "Z2"][zone];
+		command += value;
+
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent source command: ${command}`);
+
+		return true;
+	}
+
 	/** @typedef {(...args: any[]) => void} EventListener */
 
 	/**
@@ -350,6 +416,7 @@ export class AVRConnection {
 				// Special parsing for zone 2 due to a lack of "command" portion
 				if (parseInt(line.substring(0, 2)) > 0) line = "MV" + line; // Volume
 				else if (line.startsWith("ON") || line.startsWith("OFF")) line = "PW" + line; // Power
+				else if (line in sources) line = "SI" + line; // Source
 			}
 
 			let command = line.substring(0, 2);
@@ -364,6 +431,9 @@ export class AVRConnection {
 					break;
 				case "MU": // Mute
 					this.#onMuteChanged(parameter, zone);
+					break;
+				case "SI": // Source
+					this.#onSourceChanged(parameter, zone);
 					break;
 				default:
 					this.logger.warn(`Unhandled message from receiver at ${this.#host} Z${zone === 0 ? "M" : "2"}: ${line}`);
@@ -445,6 +515,20 @@ export class AVRConnection {
 
 		this.emit("muteChanged", zone);
 	}
+
+	/**
+	 * Handle a source changed message from the receiver
+	 * @param {string} parameter - The parameter from the receiver
+	 * @param {number} [zone=0] - The zone that the source status changed for
+	 */
+	#onSourceChanged(parameter, zone = 0) {
+		const status = this.status.zones[zone];
+
+		status.source = parameter;
+		this.logger.debug(`Updated receiver source for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.source}`);
+
+		this.emit("sourceChanged", zone);
+	}	
 
 	/**
 	 * Handle socket errors

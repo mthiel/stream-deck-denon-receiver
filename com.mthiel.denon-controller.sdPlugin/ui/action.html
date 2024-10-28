@@ -4,103 +4,64 @@
 <head lang="en">
 	<title>Denon Controller Settings</title>
 	<meta charset="utf-8" />
+	<link rel="stylesheet" href="action.css">
 	<script src="https://sdpi-components.dev/releases/v3/sdpi-components.js"></script>
+	<!-- <script src="sdpi-components.js"></script> -->
+	<script src="action.js"></script>
 </head>
 
 <body>
 	<sdpi-item label="Receiver">
-		<sdpi-select id="receiverSelect" setting="uuid" label-setting="name" datasource="refreshReceiverList"
-			loading="Searching for receivers..." show-refresh="true" oninput="userChoseReceiver()">
+		<sdpi-select setting="uuid" label-setting="name" datasource="refreshReceiverList"
+			loading="Searching for receivers..." show-refresh="true" oninput="handleUserChoseReceiver(this)">
 		</sdpi-select>
 	</sdpi-item>
 	<sdpi-item label="Status">
 		<sdpi-textfield id="statusMsg" setting="statusMsg" disabled></sdpi-textfield>
 	</sdpi-item>
-	<hr id="moreSettingsDivider" style="display: none;" />
-	<sdpi-item id="zoneItem" label="Zone">
-		<sdpi-select setting="zone" label="Zone">
-			<option value="0">Main</option>
-			<option value="1">Zone 2</option>
+
+	<hr />
+
+	<sdpi-item label="Zone">
+		<sdpi-select setting="zone" label="Zone" default=0 value-type="number">
+			<option value=0>Main</option>
+			<option value=1>Zone 2</option>
 		</sdpi-select>
 	</sdpi-item>
-	<div id="volumeAction" style="display: none;">
+
+	<div class="action-section volume hidden">
 		<sdpi-item label="Action">
-			<sdpi-select id="volumeActionSelect" setting="volumeAction" label="Volume" oninput="updateVolumeLevelItem()">
-				<option value="set">Set Volume</option>
+			<sdpi-select setting="volumeAction" label="Volume" default="mute" oninput="handleVolumeUIChange(this)">
 				<option value="mute">Toggle Mute</option>
+				<option value="set">Set Volume</option>
 			</sdpi-select>
 		</sdpi-item>
-		<sdpi-item id="volumeLevelItem" label="Volume level">
+		<sdpi-item label="Volume level">
 			<sdpi-textfield setting="volumeLevel" placeholder="0-85" required></sdpi-textfield>
 		</sdpi-item>
 	</div>
-	<div id="powerAction" style="display: none;">
+
+	<div class="action-section power hidden">
 		<sdpi-item label="Action">
 			<sdpi-select setting="powerAction" label="Power">
 				<option value="toggle">Toggle</option>
-				<option value="on">On</option>
-				<option value="off">Off</option>
+				<option value="on">Turn On</option>
+				<option value="off">Turn Off</option>
 			</sdpi-select>
 		</sdpi-item>
 	</div>
 
-	<script>
-		const { streamDeckClient } = SDPIComponents;
-
-		/**
-		 * Use the selected detected receiver.
-		 * @param {HTMLSelectElement} el - The select element.
-		 */
-		async function userChoseReceiver() {
-			const receiverSelect = document.getElementById('receiverSelect');
-			receiverSelect.disabled = true;
-			await streamDeckClient.send('sendToPlugin', { event: 'userChoseReceiver' });
-			receiverSelect.disabled = false;
-		}
-
-		async function updateLayoutForAction() {
-			const connectionInfo = await streamDeckClient.getConnectionInfo();
-			const controller = connectionInfo.actionInfo.payload.controller;
-			const actionIdArray = connectionInfo.actionInfo.action.split(".");
-			const actionId = actionIdArray[actionIdArray.length - 1];
-
-			switch (actionId) {
-				case "power":
-					document.title = "Denon Controller - Power";
-					document.getElementById('moreSettingsDivider').style.removeProperty('display');
-					document.getElementById('powerAction').style.removeProperty('display');
-					break;
-				case "volume":
-					document.title = "Denon Controller - Volume";
-					if (controller === "Keypad") {
-						document.getElementById('moreSettingsDivider').style.removeProperty('display');
-						document.getElementById('volumeAction').style.removeProperty('display');
-						updateVolumeLevelItem();
-					}
-					break;
-				case "source":
-					document.title = "Denon Controller - Source";
-					break;
-			}
-		}
-
-		function updateVolumeLevelItem() {
-			setTimeout(() => {
-				const volumeActionSelect = document.getElementById('volumeActionSelect');
-				const volumeLevelItem = document.getElementById('volumeLevelItem');
-				const volumeAction = volumeActionSelect.value;
-				if (volumeAction === "mute") {
-					volumeLevelItem.style.display = 'none';
-				} else {
-					volumeLevelItem.style.display = 'block';
-				}
-			}, 1);
-		}
-
-		setTimeout(() => {
-			updateLayoutForAction();
-		}, 1);
-	</script>
+	<div class="action-section source hidden">
+		<sdpi-item label="Action">
+			<sdpi-select setting="sourceAction" label="Source" default="set">
+				<option value="set">Set Source</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Source">
+			<sdpi-select setting="source" label="Source" datasource="refreshSourceList" loading="Loading sources...">
+			</sdpi-select>
+		</sdpi-item>
+	</div>
 </body>
 
 </html>

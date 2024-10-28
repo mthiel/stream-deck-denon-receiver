@@ -24,29 +24,24 @@ export class PowerAction extends PluginAction {
 	}
 
 	/**
-	 * Toggle the power state when the key is pressed
+	 * Perform the configured power action when the key is pressed.
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
 		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
 		if (!connection) return;
 
-		ev.action.getSettings()
-		.then((settings) => {
-			const zone = parseInt("" + settings.zone) || 0;
+		const settings = ev.payload.settings;
+		const zone = /** @type {number} */ (settings.zone) || 0;
+		const powerAction = settings.powerAction || "toggle";
 
-			switch (settings.powerAction) {
-				case "toggle":
-					connection.setPower(undefined, zone) || ev.action.showAlert();
-					break;
-				case "on":
-					connection.setPower(true, zone) || ev.action.showAlert();
-					break;
-				case "off":
-					connection.setPower(false, zone) || ev.action.showAlert();
-					break;
-			}
-		});
+		const actionMap = {
+			toggle: undefined,
+			on: true,
+			off: false,
+		};
+
+		connection.setPower(actionMap[powerAction], zone) || ev.action.showAlert();
 	}
 
 	/**
