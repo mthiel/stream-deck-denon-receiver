@@ -7,6 +7,7 @@ import streamDeck, { action } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").KeyDownEvent} KeyDownEvent */
 
 import { PluginAction } from "./action";
+/** @typedef {import("./action").ActionSettings} ActionSettings */
 
 /** @typedef {import("../modules/connection").AVRConnection} AVRConnection */
 /** @typedef {import("../modules/connection").ReceiverEvent} ReceiverEvent */
@@ -29,12 +30,12 @@ export class VolumeAction extends PluginAction {
 	async onWillAppear(ev) {
 		await super.onWillAppear(ev);
 
-		// Set the initial state of the action based on the receiver's volume & mute status
+		// If there's no connection yet, there's nothing to do
 		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
-		const zone = parseInt("" + ev.payload.settings.zone) || 0;
-		if (connection) {
-			updateActionState(ev.action, connection, zone);
-		}
+		if (!connection) return;
+
+		// Set the initial state of the action based on the receiver's volume & mute status
+		updateActionState(ev.action, connection);
 	}
 
 	/**
@@ -42,8 +43,10 @@ export class VolumeAction extends PluginAction {
 	 * @param {DialRotateEvent} ev - The event object.
 	 */
 	onDialRotate(ev) {
-		const zone = parseInt("" + ev.payload.settings.zone) || 0;
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolume(ev.payload.ticks, zone) || ev.action.showAlert();
+		/** @type {ActionSettings} */
+		const settings = ev.payload.settings;
+
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolume(ev.payload.ticks, settings.zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -51,8 +54,10 @@ export class VolumeAction extends PluginAction {
 	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
-		const zone = parseInt("" + ev.payload.settings.zone) || 0;
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.toggleMute(zone) || ev.action.showAlert();
+		/** @type {ActionSettings} */
+		const settings = ev.payload.settings;
+
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.setMute(undefined, settings.zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -60,21 +65,33 @@ export class VolumeAction extends PluginAction {
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
-		const zone = parseInt("" + ev.payload.settings.zone) || 0;
-
-		if (ev.payload.settings.volumeAction === "mute") {
-			this.avrConnections[this.actionReceiverMap[ev.action.id]]?.toggleMute(zone) || ev.action.showAlert();
-			return;
-		}
-
-		// Assumes volumeAction is "set"
-		const volumeLevel = parseInt("" + ev.payload.settings.volumeLevel);
-		if (isNaN(volumeLevel)) {
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		if (!connection) {
 			ev.action.showAlert();
 			return;
 		}
 
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolumeAbsolute(volumeLevel, zone) || ev.action.showAlert();
+		/** @type {ActionSettings} */
+		const settings = ev.payload.settings;
+
+		switch (settings.volumeAction) {
+			case "set":
+				if (settings.volumeLevel !== undefined && settings.volumeLevel > 0) {
+					connection.changeVolumeAbsolute(settings.volumeLevel, settings.zone) || ev.action.showAlert();
+				} else {
+					ev.action.showAlert();
+				}
+				break;
+			case "toggleMute":
+				connection.setMute(undefined, settings.zone) || ev.action.showAlert();
+				return;
+			case "mute":
+				connection.setMute(true, settings.zone) || ev.action.showAlert();
+				return;
+			case "unmute":
+				connection.setMute(false, settings.zone) || ev.action.showAlert();
+				return;
+		}
 	}
 
 	/**
@@ -106,13 +123,13 @@ export class VolumeAction extends PluginAction {
  * Update the state of an action based on the receiver's volume & mute status.
  * @param {Action} action - The action object.
  * @param {AVRConnection} connection - The receiver connection object.
- * @param {number} [zone=0] - The zone that the volume status changed for
+ * @param {number} [zone] - The zone that the volume status changed for
  */
-async function updateActionState(action, connection, zone = 0) {
-	const actionZone = parseInt("" + (await action.getSettings()).zone) || 0;
-	if (actionZone !== zone) { return; }
+async function updateActionState(action, connection, zone) {
+	const actionZone = (/** @type {ActionSettings} */ (await action.getSettings())).zone || 0;
+	if (zone !== undefined && zone !== actionZone) { return; }
 
-	const { muted, volume, maxVolume, power } = connection.status.zones[zone];
+	const { muted, volume, maxVolume, power } = connection.status.zones[actionZone];
 
 	if (action.isDial()) {
 		action.setFeedback({

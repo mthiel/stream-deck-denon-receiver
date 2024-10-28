@@ -32,12 +32,14 @@
 	<div class="action-section volume hidden">
 		<sdpi-item label="Action">
 			<sdpi-select setting="volumeAction" label="Volume" default="mute" oninput="handleVolumeUIChange(this)">
-				<option value="mute">Toggle Mute</option>
 				<option value="set">Set Volume</option>
+				<option value="toggleMute">Toggle Mute</option>
+				<option value="mute">Mute</option>
+				<option value="unmute">Unmute</option>
 			</sdpi-select>
 		</sdpi-item>
 		<sdpi-item label="Volume level">
-			<sdpi-textfield setting="volumeLevel" placeholder="0-85" required></sdpi-textfield>
+			<sdpi-textfield setting="volumeLevel" placeholder="0-85" value-type="number" required></sdpi-textfield>
 		</sdpi-item>
 	</div>
 

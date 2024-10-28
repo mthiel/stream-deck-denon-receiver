@@ -272,26 +272,24 @@ export class AVRConnection {
 	}
 
 	/**
-	 * Toggle the mute state
-	 * @param {number} [zone=0] - The zone to toggle the mute state for
+	 * Set the mute state
+	 * @param {boolean} [value] - The new mute state to set
+	 * @param {number} [zone=0] - The zone to set the mute state for
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
-	toggleMute(zone = 0) {
+	setMute(value, zone = 0) {
 		const telnet = this.#telnet;
 		const status = this.status.zones[zone];
 
-		if (!telnet || !status.power || status.muted === undefined) return false;
+		if (!telnet || !status.power) return false;
 
-		try {
-			let command = ["MU", "Z2MU"][zone];
-			command += status.muted ? "OFF" : "ON";
+		if (value === undefined) value = !status.muted;
 
-			telnet.write(command + "\r");
-			this.logger.debug(`Sent mute command: ${command}`);
-		} catch (error) {
-			this.logger.error(`Error sending mute command: ${error.message}`);
-			return false;
-		}
+		let command = ["MU", "Z2MU"][zone];
+		command += value ? "ON" : "OFF";
+
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent mute command: ${command}`);
 
 		return true;
 	}

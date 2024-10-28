@@ -26,7 +26,7 @@ import { AVRTracker } from "../modules/tracker";
  * @property {string} [statusMsg] - The connection status message to display in the PI
  * @property {number} [zone] - The zone to control on the receiver
  * @property {string} [volumeAction] - The volume action to perform on the receiver
- * @property {string} [volumeLevel] - The target volume level to set on the receiver
+ * @property {number} [volumeLevel] - The target volume level to set on the receiver
  * @property {string} [powerAction] - The power action to perform on the receiver
  * @property {string} [sourceAction] - The source action to perform on the receiver
  * @property {string} [source] - The source to set on the receiver
