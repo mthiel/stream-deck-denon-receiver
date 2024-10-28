@@ -18,11 +18,17 @@ async function handleUserChoseReceiver(receiverSelect) {
  */
 function handleVolumeUIChange(volumeActionSelect) {
     /** @type {HTMLTextAreaElement | null} SDPI TextField Element */
-    const volumeLevelItem = document.querySelector('sdpi-textfield[setting="volumeLevel"]');
+    const volumeLevelItem = document.querySelector('.action-section.volume sdpi-item[label="Volume level"]');
     if (!(volumeActionSelect && volumeLevelItem)) return;
 
-    const shouldDisableVolumeLevel = volumeActionSelect.value !== "set";
-    volumeLevelItem.disabled = shouldDisableVolumeLevel;
+    setTimeout(() => {
+        const shouldDisableVolumeLevel = volumeActionSelect.value !== "set";
+        if (shouldDisableVolumeLevel) {
+            volumeLevelItem.classList.add('hidden');
+        } else {
+            volumeLevelItem.classList.remove('hidden');
+        }
+    }, 1);
 }
 
 /**
