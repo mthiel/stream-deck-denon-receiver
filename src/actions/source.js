@@ -20,10 +20,10 @@ export class SourceAction extends PluginAction {
 		await super.onWillAppear(ev);
 
 		// Set the initial state of the action
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
-		if (connection) {
-			updateActionState(ev.action, connection);
-		}
+		// const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		// if (connection) {
+		// 	updateActionState(ev.action, connection);
+		// }
 	}
 
 	/**
