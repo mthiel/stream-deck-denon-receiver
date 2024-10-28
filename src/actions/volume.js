@@ -5,6 +5,7 @@ import streamDeck, { action } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").DialRotateEvent} DialRotateEvent */
 /** @typedef {import("@elgato/streamdeck").DialDownEvent} DialDownEvent */
 /** @typedef {import("@elgato/streamdeck").KeyDownEvent} KeyDownEvent */
+/** @typedef {import("@elgato/streamdeck").TouchTapEvent} TouchTapEvent */
 
 import { PluginAction } from "./action";
 /** @typedef {import("./action").ActionSettings} ActionSettings */
@@ -50,10 +51,21 @@ export class VolumeAction extends PluginAction {
 	}
 
 	/**
-	 * Toggle mute when the dial is pressed
+	 * Toggle mute when the dial is pressed.
 	 * @param {DialDownEvent} ev - The event object.
 	 */
 	onDialDown(ev) {
+		/** @type {ActionSettings} */
+		const settings = ev.payload.settings;
+
+		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.setMute(undefined, settings.zone) || ev.action.showAlert();
+	}
+
+	/**
+	 * Toggle mute when the touch screen is tapped.
+	 * @param {TouchTapEvent} ev - The event object.
+	 */
+	onTouchTap(ev) {
 		/** @type {ActionSettings} */
 		const settings = ev.payload.settings;
 
@@ -74,7 +86,10 @@ export class VolumeAction extends PluginAction {
 		/** @type {ActionSettings} */
 		const settings = ev.payload.settings;
 
-		switch (settings.volumeAction) {
+		// Default to "toggleMute" if no volume action is set
+		const volumeAction = settings.volumeAction || "toggleMute";
+
+		switch (volumeAction) {
 			case "set":
 				if (settings.volumeLevel !== undefined && settings.volumeLevel > 0) {
 					connection.changeVolumeAbsolute(settings.volumeLevel, settings.zone) || ev.action.showAlert();
@@ -84,13 +99,13 @@ export class VolumeAction extends PluginAction {
 				break;
 			case "toggleMute":
 				connection.setMute(undefined, settings.zone) || ev.action.showAlert();
-				return;
+				break;
 			case "mute":
 				connection.setMute(true, settings.zone) || ev.action.showAlert();
-				return;
+				break;
 			case "unmute":
 				connection.setMute(false, settings.zone) || ev.action.showAlert();
-				return;
+				break;
 		}
 	}
 
