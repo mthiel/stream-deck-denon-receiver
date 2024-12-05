@@ -15,9 +15,14 @@ import { AVRTracker } from "../modules/tracker";
 /** @typedef {import("../modules/tracker").ReceiverList} ReceiverList */
 /** @typedef {import("../modules/tracker").ReceiverInfo} ReceiverInfo */
 
+/**
+ * @typedef {Object} ReceiverDetail
+ * @property {ReceiverUUID} uuid - The receiver UUID
+ * @property {number} [zone] - The zone to control on the receiver
+ */
 /** @typedef {string} ActionUUID */
 /** @typedef {string} ReceiverUUID */
-/** @typedef {Record<ActionUUID, ReceiverUUID>} ActionReceiverMap */
+/** @typedef {Record<ActionUUID, ReceiverDetail>} ActionReceiverMap */
 
 /**
  * @typedef {Object} ActionSettings
@@ -87,6 +92,8 @@ export class PluginAction extends SingletonAction {
 			return;
 		}
 
+		const zone = /** @type {number} */ (ev.payload.settings.zone) || 0;
+
 		// If a connection doesn't exist yet, try to create one
 		if (receiverId in this.avrConnections === false) {
 			// Should we wait for the tracker to be updated first?
@@ -103,12 +110,15 @@ export class PluginAction extends SingletonAction {
 		}
 
 		// Add listener for receiver events if we haven't already
-		if (Object.values(this.actionReceiverMap).includes(receiverId) === false) {
+		if (Object.values(this.actionReceiverMap).some((detail) => detail.uuid === receiverId) === false) {
 			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this));
 		}
 
 		// Update the map with the selected receiver ID for this action
-		this.actionReceiverMap[ev.action.id] = receiverId;
+		this.actionReceiverMap[ev.action.id] = {
+			uuid: receiverId,
+			zone: zone,
+		};
 	}
 
 	/**
@@ -135,6 +145,7 @@ export class PluginAction extends SingletonAction {
 	async onUserChoseReceiver(ev) {
 		/** @type {ActionSettings} */
 		const settings = await ev.action.getSettings();
+		const zone = /** @type {number} */ (settings.zone) || 0;
 
 		let statusMsg = "";
 
@@ -145,7 +156,10 @@ export class PluginAction extends SingletonAction {
 				const connection = await this.connectReceiver(settings.uuid);
 				if (connection !== undefined) {
 					// Add the connection to the map if we were successful
-					this.actionReceiverMap[ev.action.id] = settings.uuid;
+					this.actionReceiverMap[ev.action.id] = {
+						uuid: settings.uuid,
+						zone: zone,
+					};
 					statusMsg = connection.status.statusMsg;
 				} else {
 					// If we failed to connect, clear the association
@@ -154,7 +168,10 @@ export class PluginAction extends SingletonAction {
 				}
 			} else {
 				// We already have a connection, so just update the receiver map
-				this.actionReceiverMap[ev.action.id] = settings.uuid;
+				this.actionReceiverMap[ev.action.id] = {
+					uuid: settings.uuid,
+					zone: zone,
+				};
 				statusMsg = this.avrConnections[settings.uuid].status.statusMsg;
 			}
 		} else {
@@ -235,7 +252,10 @@ export class PluginAction extends SingletonAction {
 	 */
 	routeReceiverEvent(ev) {
 		// Get the list of actions to inform of the event and add them to the event object
-		ev.actions = this.actions.filter((action) => this.actionReceiverMap[action.id] === ev.connection.uuid);
+		ev.actions = this.actions.filter((action) =>
+			this.actionReceiverMap[action.id]?.uuid === ev.connection.uuid &&
+			this.actionReceiverMap[action.id]?.zone === ev.zone
+		);
 
 		switch (ev.type) {
 			case "connected":
@@ -281,7 +301,7 @@ export class PluginAction extends SingletonAction {
 		let statusMsg = "";
 
 		if (action && action.id in this.actionReceiverMap) {
-			statusMsg = this.avrConnections[this.actionReceiverMap[action.id]]?.status.statusMsg || "";
+			statusMsg = this.avrConnections[this.actionReceiverMap[action.id].uuid]?.status.statusMsg || "";
 		}
 
 		this.updateStatusMessage(statusMsg);

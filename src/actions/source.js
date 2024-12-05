@@ -27,11 +27,11 @@ export class SourceAction extends PluginAction {
 	}
 
 	/**
-	 * Toggle the power state when the key is pressed
+	 * Change to the configured source when the key is pressed
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id].uuid];
 		if (!connection) return;
 
 		/** @type {ActionSettings} */

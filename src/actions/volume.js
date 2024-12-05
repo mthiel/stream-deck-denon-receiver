@@ -32,7 +32,7 @@ export class VolumeAction extends PluginAction {
 		await super.onWillAppear(ev);
 
 		// If there's no connection yet, there's nothing to do
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id].uuid];
 		if (!connection) return;
 
 		// Set the initial state of the action based on the receiver's volume & mute status
@@ -47,7 +47,7 @@ export class VolumeAction extends PluginAction {
 		/** @type {ActionSettings} */
 		const settings = ev.payload.settings;
 
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.changeVolume(ev.payload.ticks, settings.zone) || ev.action.showAlert();
+		this.avrConnections[this.actionReceiverMap[ev.action.id].uuid]?.changeVolume(ev.payload.ticks, settings.zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -58,7 +58,7 @@ export class VolumeAction extends PluginAction {
 		/** @type {ActionSettings} */
 		const settings = ev.payload.settings;
 
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.setMute(undefined, settings.zone) || ev.action.showAlert();
+		this.avrConnections[this.actionReceiverMap[ev.action.id].uuid]?.setMute(undefined, settings.zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -69,7 +69,7 @@ export class VolumeAction extends PluginAction {
 		/** @type {ActionSettings} */
 		const settings = ev.payload.settings;
 
-		this.avrConnections[this.actionReceiverMap[ev.action.id]]?.setMute(undefined, settings.zone) || ev.action.showAlert();
+		this.avrConnections[this.actionReceiverMap[ev.action.id].uuid]?.setMute(undefined, settings.zone) || ev.action.showAlert();
 	}
 
 	/**
@@ -77,7 +77,7 @@ export class VolumeAction extends PluginAction {
 	 * @param {KeyDownEvent} ev - The event object.
 	 */
 	onKeyDown(ev) {
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id].uuid];
 		if (!connection) {
 			ev.action.showAlert();
 			return;
