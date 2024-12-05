@@ -1,7 +1,8 @@
 {
     "scripts": {
         "build": "rollup -c",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.mthiel.denon-controller\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.mthiel.denon-controller\"",
+        "pack": "streamdeck pack --no-update-check com.mthiel.denon-controller.sdPlugin"
     },
     "type": "module",
     "devDependencies": {

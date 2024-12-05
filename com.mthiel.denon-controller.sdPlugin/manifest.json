@@ -9,7 +9,10 @@
 			"Icon": "imgs/actions/volume/volume2",
 			"Tooltip": "Displays the current volume and allows for adjustment.",
 			"PropertyInspectorPath": "ui/action.html",
-			"Controllers": [ "Keypad", "Encoder" ],
+			"Controllers": [
+				"Keypad",
+				"Encoder"
+			],
 			"DisableAutomaticStates": true,
 			"Encoder": {
 				"layout": "$B1",
@@ -36,7 +39,9 @@
 			"Icon": "imgs/actions/power/powerOn",
 			"Tooltip": "Turns the receiver on or off.",
 			"PropertyInspectorPath": "ui/action.html",
-			"Controllers": [ "Keypad" ],
+			"Controllers": [
+				"Keypad"
+			],
 			"DisableAutomaticStates": true,
 			"States": [
 				{
@@ -55,7 +60,9 @@
 			"Icon": "imgs/actions/source/source",
 			"Tooltip": "Displays the current source and allows for selection.",
 			"PropertyInspectorPath": "ui/action.html",
-			"Controllers": [ "Keypad" ],
+			"Controllers": [
+				"Keypad"
+			],
 			"DisableAutomaticStates": true,
 			"States": [
 				{
