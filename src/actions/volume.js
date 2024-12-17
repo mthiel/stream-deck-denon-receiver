@@ -32,7 +32,7 @@ export class VolumeAction extends PluginAction {
 		await super.onWillAppear(ev);
 
 		// If there's no connection yet, there's nothing to do
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id].uuid];
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
 		if (!connection) return;
 
 		// Set the initial state of the action based on the receiver's volume & mute status
