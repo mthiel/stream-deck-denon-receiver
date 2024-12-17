@@ -22,5 +22,8 @@
         "@elgato/streamdeck": "^1.0.0",
         "@xmldom/xmldom": "^0.9.4",
         "telnet-stream": "^1.1.0"
+    },
+    "optionalDependencies": {
+        "@rollup/rollup-linux-x64-gnu": "^4.28.1"
     }
 }

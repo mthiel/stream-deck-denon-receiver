@@ -1,6 +1,6 @@
 {
-	"Name": "Denon Receiver Network Control",
-	"Version": "0.7.2.0",
+	"Name": "Receiver Control",
+	"Version": "0.7.2.1",
 	"Author": "Matthew Thiel",
 	"Actions": [
 		{
@@ -92,8 +92,7 @@
 		}
 	],
 	"Nodejs": {
-		"Version": "20",
-		"Debug": "enabled"
+		"Version": "20"
 	},
 	"UUID": "com.mthiel.denon-controller"
 }
