@@ -110,6 +110,17 @@ export class VolumeAction extends PluginAction {
 	}
 
 	/**
+	 * Handle a user choosing a receiver from the PI.
+	 * @param {SendToPluginEvent} ev - The event object.
+	 */
+	async onUserChoseReceiver(ev) {
+		await super.onUserChoseReceiver(ev);
+
+		// Update the action state for the new receiver
+		updateActionState(ev.action, this.avrConnections[this.actionReceiverMap[ev.action.id].uuid]);
+	}
+
+	/**
 	 * Handle a receiver volume changing.
 	 * @param {ReceiverEvent} ev - The event object.
 	 */

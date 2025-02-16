@@ -109,11 +109,6 @@ export class PluginAction extends SingletonAction {
 			}
 		}
 
-		// Add listener for receiver events if we haven't already
-		if (Object.values(this.actionReceiverMap).some((detail) => detail.uuid === receiverId) === false) {
-			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this));
-		}
-
 		// Update the map with the selected receiver ID for this action
 		this.actionReceiverMap[ev.action.id] = {
 			uuid: receiverId,
@@ -241,6 +236,9 @@ export class PluginAction extends SingletonAction {
 			this.logger.info(`Creating new receiver connection to ${receiverInfo.name || receiverInfo.currentIP}.`);
 			const connection = new AVRConnection(this.plugin, receiverId, receiverInfo.currentIP);
 			this.avrConnections[receiverId] = connection;
+
+			// Add listener for receiver events if we haven't already
+			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this));
 		}
 
 		return this.avrConnections[receiverId];
