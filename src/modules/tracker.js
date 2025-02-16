@@ -1,4 +1,5 @@
 import dgram from "dgram";
+import os from "os";
 import { EventEmitter } from "events";
 import { DOMParser } from "@xmldom/xmldom";
 /** @typedef {import("dgram").Socket} Socket */
@@ -219,17 +220,60 @@ export const AVRTracker = {
 	listen: async () => {
 		logger.debug("AVRTracker listener initializing...");
 
-		udpSocket = dgram
-			.createSocket("udp4")
-			.on("listening", () => { logger.debug("AVRTracker udp socket is ready."); })
-			.on("message", (message, rinfo) => { onResponse(message, rinfo) })
-			.on("error", (error) => { logger.error(`AVRTracker error: ${error}`) });
+		// First bind to all interfaces, then configure multicast
+		udpSocket = dgram.createSocket({ 
+			type: "udp4",
+			reuseAddr: true,
+			ipv6Only: false
+		})
+		.on("listening", () => { 
+			try {
+				// Essential Windows multicast setup
+				udpSocket.setBroadcast(true);
+				udpSocket.setMulticastTTL(4); // Reduced TTL, some Windows systems have issues with higher values
+				udpSocket.setMulticastLoopback(true);
 
+				// Get all network interfaces
+				const interfaces = os.networkInterfaces();
+				Object.values(interfaces).forEach((iface) => {
+					if (!iface) return;
+
+					iface.forEach((address) => {
+						// Only handle IPv4 interfaces that aren't internal
+						if (address.family === 'IPv4' && !address.internal) {
+							try {
+								// First try to add membership with specific interface
+								udpSocket.addMembership(SSDP_BROADCAST_ADDRESS, address.address);
+								logger.debug(`Added multicast membership for interface ${address.address}`);
+
+								// On Windows, explicitly set the multicast interface
+								udpSocket.setMulticastInterface(address.address);
+								logger.debug(`Set multicast interface to ${address.address}`);
+							} catch (err) {
+								logger.debug(`Failed to configure interface ${address.address}: ${err.message}`);
+							}
+						}
+					});
+				});
+
+				logger.debug(`AVRTracker udp socket listening on ${udpSocket.address().address}:${udpSocket.address().port}`);
+			} catch (err) {
+				logger.error(`Error configuring multicast: ${err.message}`);
+			}
+		})
+		.on("message", (message, rinfo) => { onResponse(message, rinfo) })
+		.on("error", (error) => { logger.error(`AVRTracker error: ${error}`) });
+
+		// Bind to all interfaces
 		await new Promise((resolve) => {
-			udpSocket.bind({}, () => {
+			udpSocket.bind({
+				port: 0,
+				address: '0.0.0.0',
+				exclusive: false
+			}, () => {
 				resolve(undefined);
 			});
-		})
+		});
 
 		// Read the receiver list from the global settings cache
 		await readFromPersistentCache();
@@ -252,10 +296,8 @@ export const AVRTracker = {
 			return receiverList;
 		}
 
-		logger.info("AVRTracker broadcasting a SSDP search for HEOS receivers on the network...");
-
+		logger.info("AVRTracker broadcasting SSDP search for HEOS receivers on the network...");
 		isScanning = true;
-
 		const startTime = Date.now();
 
 		function onUpdate() {
@@ -265,12 +307,30 @@ export const AVRTracker = {
 
 		AVRTracker.on("updated", onUpdate);
 
+		// Get all network interfaces
+		const interfaces = os.networkInterfaces();
+		const message = createSSDPMessage(maxWait);
+
 		// The broadcast and wait loop
 		for (let i = 1; i <= count; i++) {
-			udpSocket.send(createSSDPMessage(maxWait), SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
+			// Send on each interface
+			Object.values(interfaces).forEach((iface) => {
+				if (!iface) return;
+
+				iface.forEach((address) => {
+					if (address.family === 'IPv4' && !address.internal) {
+						try {
+							udpSocket.setMulticastInterface(address.address);
+							udpSocket.send(message, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
+							logger.debug(`Sent request ${i} on interface ${address.address}`);
+						} catch (err) {
+							logger.debug(`Failed to send on interface ${address.address}: ${err.message}`);
+						}
+					}
+				});
+			});
 
 			logger.info(`AVRTracker sent request ${i} of ${count}. Waiting for replies...`);
-
 			await new Promise((resolve) => setTimeout(resolve, maxWait * 1000));
 		}
 
