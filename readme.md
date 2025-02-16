@@ -1,4 +1,4 @@
-# Denon Receiver Network Control for Stream Deck
+# Denon Receiver Control for Stream Deck
 
 A Stream Deck plugin that provides network control of Denon/Marantz receivers with HEOS support.
 
@@ -27,18 +27,10 @@ A Stream Deck plugin that provides network control of Denon/Marantz receivers wi
 
 ## Installation
 
-### Install from the Elgato Marketplace (Coming soon)
-*TBD: Currently only installable by building from source.*
-
-<!--
-1. Download the plugin from the Stream Deck Store
+### Download and install locally
+1. Download the latest release from -> [here](https://github.com/mthiel/stream-deck-denon-receiver/releases/latest) <-
 2. Double-click the downloaded file to install
 3. Stream Deck software will automatically install the plugin
--->
-
-### Download and install locally (Probably coming soon)
-*TBD: Currently only installable by building from source.*
-
 
 ## Usage
 
@@ -65,15 +57,14 @@ A Stream Deck plugin that provides network control of Denon/Marantz receivers wi
 
 #### Input Source Control
 - Quick selection of input sources
-- ~~Option to mirror Main Zone source in Zone 2~~ (Coming soon)
+- ~~Option to mirror Main Zone source in Zone 2~~ (TBD)
 
 ## Development
 
 This plugin is built using:
 - Node.js 20
 - Stream Deck SDK v2
-- @elgato/streamdeck SDK
-- *Process currently only tested on MacOS 15*
+- @elgato/streamdeck node module
 
 To build from source:
 
@@ -93,7 +84,7 @@ npm run watch
 ## Troubleshooting
 
 If your receiver isn't detected:
-1. Ensure your receiver has HEOS support and is enabled
-2. Verify your receiver is on the same network as your computer
-3. Check that no firewall is blocking network discovery
-4. Try refreshing the receiver list in the action settings
+1. Ensure your receiver has HEOS support and is enabled (You do not need to be logged into HEOS though)
+3. Verify your receiver is on the same LAN segment as your computer
+4. Check that no firewall is blocking network discovery
+5. Try refreshing the receiver list in the action settings
