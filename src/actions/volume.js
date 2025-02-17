@@ -125,6 +125,8 @@ export class VolumeAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverVolumeChanged(ev) {
+		if (!ev.actions) return;
+
 		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 
@@ -133,6 +135,8 @@ export class VolumeAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverMuteChanged(ev) {
+		if (!ev.actions) return;
+
 		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 
@@ -141,6 +145,8 @@ export class VolumeAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverPowerChanged(ev) {
+		if (!ev.actions) return;
+
 		Promise.all(ev.actions.map((action) => updateActionState(action, ev.connection, ev.zone)));
 	}
 }

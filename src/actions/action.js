@@ -112,7 +112,7 @@ export class PluginAction extends SingletonAction {
 		// Update the map with the selected receiver ID for this action
 		this.actionReceiverMap[ev.action.id] = {
 			uuid: receiverId,
-			zone: zone,
+			zone: zone
 		};
 	}
 
@@ -153,7 +153,7 @@ export class PluginAction extends SingletonAction {
 					// Add the connection to the map if we were successful
 					this.actionReceiverMap[ev.action.id] = {
 						uuid: settings.uuid,
-						zone: zone,
+						zone: zone
 					};
 					statusMsg = connection.status.statusMsg;
 				} else {
@@ -165,7 +165,7 @@ export class PluginAction extends SingletonAction {
 				// We already have a connection, so just update the receiver map
 				this.actionReceiverMap[ev.action.id] = {
 					uuid: settings.uuid,
-					zone: zone,
+					zone: zone
 				};
 				statusMsg = this.avrConnections[settings.uuid].status.statusMsg;
 			}
@@ -237,7 +237,7 @@ export class PluginAction extends SingletonAction {
 			const connection = new AVRConnection(this.plugin, receiverId, receiverInfo.currentIP);
 			this.avrConnections[receiverId] = connection;
 
-			// Add listener for receiver events if we haven't already
+			// Set up listener for receiver events
 			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this));
 		}
 
@@ -250,7 +250,7 @@ export class PluginAction extends SingletonAction {
 	 */
 	routeReceiverEvent(ev) {
 		// Get the list of actions to inform of the event and add them to the event object
-		ev.actions = this.actions.filter((action) =>
+		ev.actions = this.actions.toArray().filter((action) =>
 			this.actionReceiverMap[action.id]?.uuid === ev.connection.uuid &&
 			this.actionReceiverMap[action.id]?.zone === ev.zone
 		);

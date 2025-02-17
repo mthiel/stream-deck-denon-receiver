@@ -5,6 +5,7 @@ import { setTimeout } from "timers/promises";
 import { TelnetSocket } from "telnet-stream";
 
 /** @typedef {import("@elgato/streamdeck").Logger} Logger */
+/** @typedef {import("@elgato/streamdeck").Action} Action */
 
 /** @typedef {import("../plugin").PluginContext} PluginContext */
 /** @typedef {import("./tracker").ReceiverInfo} ReceiverInfo */
@@ -20,7 +21,7 @@ import { TelnetSocket } from "telnet-stream";
  * 			 | "sourceChanged"} type - The type of event.
  * @property {number} [zone] - The zone that the event occurred on.
  * @property {AVRConnection} connection - The receiver connection.
- * @property {Object} [actions] - The actions to inform of the event.
+ * @property {Action[]} [actions] - The actions to inform of the event.
  */
 
 /**
@@ -343,6 +344,7 @@ export class AVRConnection {
 	 * @param {EventListener} listener - The listener function to call when the event is emitted
 	 */
 	on(listener) {
+		// Don't add the same listener twice
 		if (this.#eventEmitter.listeners("event").includes(listener)) {
 			return;
 		}
