@@ -59,6 +59,8 @@ export class PowerAction extends PluginAction {
 	 * @param {ReceiverEvent} ev - The event object.
 	 */
 	onReceiverPowerChanged(ev) {
+		if (!ev.actions) return;
+
 		Promise.all(
 			ev.actions.map(async (action) => {
 				// Filter any non-key actions that don't match the event zone
