@@ -18,7 +18,8 @@ import { TelnetSocket } from "telnet-stream";
  * 			 | "volumeChanged"
  * 			 | "muteChanged"
  * 			 | "status"
- * 			 | "sourceChanged"} type - The type of event.
+ * 			 | "sourceChanged"
+ * 			 | "dynamicVolumeChanged"} type - The type of event.
  * @property {number} [zone] - The zone that the event occurred on.
  * @property {AVRConnection} connection - The receiver connection.
  * @property {Action[]} [actions] - The actions to inform of the event.
@@ -29,6 +30,7 @@ import { TelnetSocket } from "telnet-stream";
  * @property {boolean} power - Whether the zone is powered on.
  * @property {number} volume - The current volume of the zone.
  * @property {number} maxVolume - The (current) maximum volume of the receiver.
+ * @property {boolean} [dynamicVolume] - Whether the volume is dynamic.
  * @property {boolean} muted - Whether the zone is muted.
  * @property {string} source - The current source of the zone.
  */
@@ -93,6 +95,7 @@ export class AVRConnection {
 				volume: 0,
 				maxVolume: 85,
 				muted: false,
+				dynamicVolume: false,
 				source: "",
 			},
 			{
@@ -337,6 +340,24 @@ export class AVRConnection {
 		return true;
 	}
 
+	/**
+	 * Set the dynamic volume state
+	 * @param {"HEV" | "MED" | "LIT" | "OFF"} value - The new dynamic volume state to set
+	 * @returns {boolean} Whether the command was sent successfully
+	 */
+	setDynamicVolume(value) {
+		const telnet = this.#telnet;
+		if (!telnet) return false;
+
+		let command = "PSDYNVOL ";
+		command += value;
+
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent dynamic volume command: ${command}`);
+
+		return true;
+	}
+
 	/** @typedef {(...args: any[]) => void} EventListener */
 
 	/**
@@ -406,21 +427,44 @@ export class AVRConnection {
 		for (let line of lines) {
 			if (line.length === 0) continue;
 
+			let command = "";
+			let parameter = "";
 			let zone = 0;
 
-			// Zone 2 status messages start with "Z2"
 			if (line.startsWith("Z2")) {
+				// Zone 2 status messages start with "Z2"
 				zone = 1;
 				line = line.substring(2); // Remove the "Z2" prefix
 
 				// Special parsing for zone 2 due to a lack of "command" portion
-				if (parseInt(line.substring(0, 2)) > 0) line = "MV" + line; // Volume
-				else if (line.startsWith("ON") || line.startsWith("OFF")) line = "PW" + line; // Power
-				else if (line in sources) line = "SI" + line; // Source
-			}
+				if (parseInt(line.substring(0, 2)) > 0) {
+					// Volume
+					command = "MV";
+					parameter = line.substring(2);
+				} else if (line.startsWith("ON") || line.startsWith("OFF")) {
+					// Power
+					command = "PW";
+					parameter = line;
+				} else if (line in sources) {
+					// Source
+					command = "SI";
+					parameter = line;
+				} else {
+					// Resume default parsing
+					command = line.substring(0, 2);
+					parameter = line.substring(2);
+				}
+			} else if (line.startsWith("PS")) {
+				// Unclear what this meta-command stands for
+				line = line.substring(2);  // Remove the "PS" prefix
 
-			let command = line.substring(0, 2);
-			let parameter = line.substring(2);
+				// These commands are all space-delimited from their values
+				[command, parameter] = line.split(" ");
+			} else {
+				// Default parsing
+				command = line.substring(0, 2);
+				parameter = line.substring(2);
+			}
 
 			switch (command) {
 				case "PW": // Power
@@ -434,6 +478,9 @@ export class AVRConnection {
 					break;
 				case "SI": // Source
 					this.#onSourceChanged(parameter, zone);
+					break;
+				case "DYNVOL": // Dynamic volume
+					this.#onDynamicVolumeChanged(parameter);
 					break;
 				default:
 					this.logger.warn(`Unhandled message from receiver at ${this.#host} Z${zone === 0 ? "M" : "2"}: ${line}`);
@@ -528,7 +575,20 @@ export class AVRConnection {
 		this.logger.debug(`Updated receiver source for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.source}`);
 
 		this.emit("sourceChanged", zone);
-	}	
+	}
+
+	/**
+	 * Handle a dynamic volume changed message from the receiver
+	 * @param {string} parameter - The parameter from the receiver
+	 */
+	#onDynamicVolumeChanged(parameter) {
+		const status = this.status;
+
+		status.zones[0].dynamicVolume = parameter === "ON";
+		this.logger.debug(`Updated receiver dynamic volume status for ${this.#host}: ${status.zones[0].dynamicVolume}`);
+
+		this.emit("dynamicVolumeChanged");
+	}
 
 	/**
 	 * Handle socket errors
@@ -561,6 +621,7 @@ export class AVRConnection {
 		telnet.write("PW?\r"); // Request the power status
 		telnet.write("MV?\r"); // Request the volume
 		telnet.write("MU?\r"); // Request the mute status
+		telnet.write("PSDYNVOL ?\r"); // Request the dynamic volume status
 
 		// Zone 2
 		telnet.write("Z2PW?\r"); // Request the power status
