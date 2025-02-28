@@ -30,7 +30,7 @@ import { TelnetSocket } from "telnet-stream";
  * @property {boolean} power - Whether the zone is powered on.
  * @property {number} volume - The current volume of the zone.
  * @property {number} maxVolume - The (current) maximum volume of the receiver.
- * @property {boolean} [dynamicVolume] - Whether the volume is dynamic.
+ * @property {string} [dynamicVolume] - Whether the volume is dynamic.
  * @property {boolean} muted - Whether the zone is muted.
  * @property {string} source - The current source of the zone.
  */
@@ -95,7 +95,7 @@ export class AVRConnection {
 				volume: 0,
 				maxVolume: 85,
 				muted: false,
-				dynamicVolume: false,
+				dynamicVolume: "OFF",
 				source: "",
 			},
 			{
@@ -584,7 +584,7 @@ export class AVRConnection {
 	#onDynamicVolumeChanged(parameter) {
 		const status = this.status;
 
-		status.zones[0].dynamicVolume = parameter === "ON";
+		status.zones[0].dynamicVolume = parameter;
 		this.logger.debug(`Updated receiver dynamic volume status for ${this.#host}: ${status.zones[0].dynamicVolume}`);
 
 		this.emit("dynamicVolumeChanged");
