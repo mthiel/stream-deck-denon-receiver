@@ -8,14 +8,13 @@ A Stream Deck plugin that provides network control of Denon/Marantz receivers wi
   - Works with both standard Stream Deck buttons and Stream Deck+ dials
   - Shows real-time volume level on dials
   - Visual feedback for mute state
-  
+
 - **Power Control**: Turn your receiver on/off with visual power state feedback
 
 - **Input Source Selection**: Quick access to switch between input sources
-  - Supports all standard Denon/Marantz input sources
-  - ~~Zone 2 can mirror Main Zone source~~ (Coming soon)
+  - Supports standard Denon/Marantz input sources
 
-- **Multi-Zone Support**: Control Main Zone and Zone 2 independently
+- **Multi-Zone Support**: Control Main Zone and Zone 2 independently for actions that support zones
 
 ## Requirements
 
@@ -50,6 +49,10 @@ A Stream Deck plugin that provides network control of Denon/Marantz receivers wi
   - Push/touch to toggle mute
   - Shows current volume level on dial display
 
+#### Dynamic Volume Control
+- Available as a button to cycle through each state
+- Shows the current state of the feature from the receiver
+
 #### Power Control
 - Toggle power state
 - Explicitly set power on or off
@@ -57,7 +60,6 @@ A Stream Deck plugin that provides network control of Denon/Marantz receivers wi
 
 #### Input Source Control
 - Quick selection of input sources
-- ~~Option to mirror Main Zone source in Zone 2~~ (TBD)
 
 ## Development
 

@@ -1,4 +1,9 @@
 {
+    "name": "com.mthiel.streamdeck.denon-controller",
+    "version": "0.7.4.0",
+    "description": "Uses the network interface on many Denon/Marantz receivers to control basic functions. Requires a model with HEOS support for network control.",
+    "author": "Matthew Thiel",
+    "homepage": "https://github.com/mthiel/stream-deck-denon-receiver",
     "scripts": {
         "build": "rollup -c",
         "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.mthiel.denon-controller\"",
