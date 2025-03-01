@@ -26,7 +26,7 @@ import { TelnetSocket } from "telnet-stream";
  */
 
 /**
- * @typedef {"OFF" | "HEV" | "MED" | "LIT"} DynamicVolume
+ * @typedef {"OFF" | "LIT" | "MED" | "HEV" | undefined} DynamicVolume
  */
 
 /**
@@ -346,7 +346,7 @@ export class AVRConnection {
 
 	/**
 	 * Set the dynamic volume state
-	 * @param {"HEV" | "MED" | "LIT" | "OFF"} value - The new dynamic volume state to set
+	 * @param {DynamicVolume} value - The new dynamic volume state to set
 	 * @returns {boolean} Whether the command was sent successfully
 	 */
 	setDynamicVolume(value) {

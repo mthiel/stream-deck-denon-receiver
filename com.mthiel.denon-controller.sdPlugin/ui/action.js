@@ -59,6 +59,10 @@ async function updateLayoutForAction() {
                 document.querySelector('.action-section.source')?.classList.remove('hidden');
             }
             break;
+        case "dynvol":
+            document.querySelector('.separator')?.classList.add('hidden');
+            document.querySelector('.zone-item')?.classList.add('hidden');
+            break;
     }
 }
 
