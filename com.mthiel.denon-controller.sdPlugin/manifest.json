@@ -70,6 +70,39 @@
 					"Image": "imgs/actions/source/source"
 				}
 			]
+		},
+		{
+			"Name": "Dynamic Volume Control",
+			"UUID": "com.mthiel.denon-controller.dynvol",
+			"Icon": "imgs/actions/dynvol/dynvol",
+			"Tooltip": "Displays the current dynamic volume state and allows for selection.",
+			"PropertyInspectorPath": "ui/action.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"States": [
+				{
+					"Name": "Dynvol",
+					"Image": "imgs/actions/dynvol/dynvol"
+				},
+				{
+					"Name": "Off",
+					"Image": "imgs/actions/dynvol/off"
+				},
+				{
+					"Name": "Light",
+					"Image": "imgs/actions/dynvol/light"
+				},
+				{
+					"Name": "Medium",
+					"Image": "imgs/actions/dynvol/medium"
+				},
+				{
+					"Name": "Heavy",
+					"Image": "imgs/actions/dynvol/heavy"
+				}
+			]
 		}
 	],
 	"Category": "Receiver Control",
