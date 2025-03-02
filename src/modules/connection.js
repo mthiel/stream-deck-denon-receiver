@@ -120,6 +120,12 @@ export class AVRConnection {
 	#eventEmitter = new EventEmitter();
 
 	/**
+	 * The listeners for this instance
+	 * @type {string[]}
+	 */
+	#listenerIds = [];
+
+	/**
 	 * The raw socket connection to the receiver
 	 * @type {net.Socket | undefined}
 	 */
@@ -199,6 +205,9 @@ export class AVRConnection {
 	disconnect() {
 		let rawSocket = this.#rawSocket;
 		let telnet = this.#telnet;
+
+		// Clear the listeners for this instance
+		this.#listenerIds = [];
 
 		// Dispose of this instance's sockets
 		this.#rawSocket = undefined;
@@ -367,12 +376,17 @@ export class AVRConnection {
 	/**
 	 * Subscribe to events from this receiver
 	 * @param {EventListener} listener - The listener function to call when the event is emitted
+	 * @param {string} id - The binding ID for this listener, should be the manifest ID of the action that is listening
 	 */
-	on(listener) {
+	on(listener, id) {
+		const listenerId = `${id}-${listener.name}`;
+
 		// Don't add the same listener twice
-		if (this.#eventEmitter.listeners("event").includes(listener)) {
+		if (this.#listenerIds.includes(listenerId)) {
 			return;
 		}
+
+		this.#listenerIds.push(listenerId);
 
 		this.#eventEmitter.on("event", listener);
 	}
@@ -512,9 +526,9 @@ export class AVRConnection {
 		this.emit("powerChanged", zone);
 
 		// Request the full status of the receiver if it is powered on
-		if (status.power) {
-			this.#requestFullReceiverStatus();
-		}
+		// if (status.power) {
+		// 	this.#requestFullReceiverStatus();
+		// }
 	}
 
 	/**

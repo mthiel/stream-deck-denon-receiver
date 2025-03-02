@@ -22,15 +22,10 @@ export class PowerAction extends PluginAction {
 	async onWillAppear(ev) {
 		await super.onWillAppear(ev);
 
-		// If there's no connection yet, there's nothing to do
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
-		if (!connection) return;
-
 		// Set the initial state of the action based on the receiver's power status
-		if (ev.action.isKey()) {
-			const zone = /** @type {number} */ (ev.payload.settings.zone) || 0;
-			ev.action.setState(connection.status.zones[zone].power ? 0 : 1);
-		}
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
+		const zone = /** @type {number} */ (ev.payload.settings.zone) || 0;
+		updateActionState(ev.action, connection, zone);
 	}
 
 	/**
@@ -61,13 +56,24 @@ export class PowerAction extends PluginAction {
 	onReceiverPowerChanged(ev) {
 		if (!ev.actions) return;
 
-		Promise.all(
-			ev.actions.map(async (action) => {
-				// Filter any non-key actions that don't match the event zone
-				if (action.isKey() === false) return;
+		Promise.all(ev.actions.map(async (action) => updateActionState(action, ev.connection, ev.zone)));
+	}
+}
 
-				action.setState(ev.connection.status.zones[ev.zone || 0].power ? 0 : 1);
-			})
-		);
+/**
+ * Update the state of an action based on the receiver's power status.
+ * @param {Action} action - The action object.
+ * @param {AVRConnection} [connection] - The receiver connection object.
+ * @param {number} [zone] - The zone that the power status changed for
+ */
+async function updateActionState(action, connection, zone) {
+	const actionZone = (/** @type {ActionSettings} */ (await action.getSettings())).zone || 0;
+	if (zone !== undefined && zone !== actionZone) { return; }
+
+	const { power } = connection !== undefined ? connection.status.zones[actionZone] : {};
+
+	const state = power !== undefined ? power ? 0 : 1 : 1;
+	if (action.isKey()) {
+		action.setState(state);
 	}
 }

@@ -109,6 +109,11 @@ export class PluginAction extends SingletonAction {
 			}
 		}
 
+		// Set up or refresh the listener for receiver events
+		if (this.manifestId) {
+			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this), this.manifestId);
+		}
+
 		// Update the map with the selected receiver ID for this action
 		this.actionReceiverMap[ev.action.id] = {
 			uuid: receiverId,
@@ -156,6 +161,11 @@ export class PluginAction extends SingletonAction {
 						zone: zone
 					};
 					statusMsg = connection.status.statusMsg;
+
+					// Set up or refresh the listener for receiver events
+					if (this.manifestId) {
+						this.avrConnections[settings.uuid].on(this.routeReceiverEvent.bind(this), this.manifestId);
+					}
 				} else {
 					// If we failed to connect, clear the association
 					delete this.actionReceiverMap[ev.action.id];
@@ -168,6 +178,11 @@ export class PluginAction extends SingletonAction {
 					zone: zone
 				};
 				statusMsg = this.avrConnections[settings.uuid].status.statusMsg;
+
+				// Set up or refresh the listener for receiver events
+				if (this.manifestId) {
+					this.avrConnections[settings.uuid].on(this.routeReceiverEvent.bind(this), this.manifestId);
+				}
 			}
 		} else {
 			// Ensure the receiver association is cleared if no receiver is selected
@@ -236,9 +251,6 @@ export class PluginAction extends SingletonAction {
 			this.logger.info(`Creating new receiver connection to ${receiverInfo.name || receiverInfo.currentIP}.`);
 			const connection = new AVRConnection(this.plugin, receiverId, receiverInfo.currentIP);
 			this.avrConnections[receiverId] = connection;
-
-			// Set up listener for receiver events
-			this.avrConnections[receiverId].on(this.routeReceiverEvent.bind(this));
 		}
 
 		return this.avrConnections[receiverId];

@@ -31,11 +31,8 @@ export class VolumeAction extends PluginAction {
 	async onWillAppear(ev) {
 		await super.onWillAppear(ev);
 
-		// If there's no connection yet, there's nothing to do
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
-		if (!connection) return;
-
 		// Set the initial state of the action based on the receiver's volume & mute status
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
 		updateActionState(ev.action, connection);
 	}
 
@@ -117,7 +114,8 @@ export class VolumeAction extends PluginAction {
 		await super.onUserChoseReceiver(ev);
 
 		// Update the action state for the new receiver
-		updateActionState(ev.action, this.avrConnections[this.actionReceiverMap[ev.action.id].uuid]);
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
+		updateActionState(ev.action, connection);
 	}
 
 	/**
@@ -154,28 +152,36 @@ export class VolumeAction extends PluginAction {
 /**
  * Update the state of an action based on the receiver's volume & mute status.
  * @param {Action} action - The action object.
- * @param {AVRConnection} connection - The receiver connection object.
+ * @param {AVRConnection} [connection] - The receiver connection object.
  * @param {number} [zone] - The zone that the volume status changed for
  */
 async function updateActionState(action, connection, zone) {
 	const actionZone = (/** @type {ActionSettings} */ (await action.getSettings())).zone || 0;
 	if (zone !== undefined && zone !== actionZone) { return; }
 
-	const { muted, volume, maxVolume, power } = connection.status.zones[actionZone];
+	const { muted, volume, maxVolume, power } = connection !== undefined
+		? connection.status.zones[actionZone] : {};
 
 	if (action.isDial()) {
+		const indicatorValue = volume !== undefined && maxVolume !== undefined
+			? muted || !power ? 0 : (volume / maxVolume) * 100 : undefined;
+
+		const value = power !== undefined ? !power ? "Off" : muted ? "Muted" : `Vol: ${volume}` : "";
+
+		const icon = power !== undefined ? muted || !power ? images.muted : images.unmuted : images.muted;
+
 		action.setFeedback({
 			indicator: {
-				value: muted || !power ? 0 : (volume / maxVolume) * 100
+				value: indicatorValue
 			},
-			value: !power ? "Off" :
-				muted ? "Muted" : `Vol: ${volume}`
+			value: value
 		});
 
 		action.setFeedback({
-			icon: muted || !power ? images.muted : images.unmuted
+			icon: icon
 		});
 	} else if (action.isKey()) {
-		action.setState(muted || !power ? 1 : 0);
+		const state = power !== undefined ? muted || !power ? 1 : 0 : 1;
+		action.setState(state);
 	}
 }

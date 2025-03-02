@@ -16,16 +16,6 @@ import { AVRConnection } from "../modules/connection";
  */
 @action({ UUID: "com.mthiel.denon-controller.source" })
 export class SourceAction extends PluginAction {
-	async onWillAppear(ev) {
-		await super.onWillAppear(ev);
-
-		// Set the initial state of the action
-		// const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
-		// if (connection) {
-		// 	updateActionState(ev.action, connection);
-		// }
-	}
-
 	/**
 	 * Change to the configured source when the key is pressed
 	 * @param {KeyDownEvent} ev - The event object.
@@ -69,9 +59,6 @@ export class SourceAction extends PluginAction {
 	 * @param {SendToPluginEvent} ev - The event object.
 	 */
 	async onRefreshSourceListForPI(ev) {
-		// const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]];
-		// if (!connection) return;
-
 		/** @type {ActionSettings} */
 		const settings = await ev.action.getSettings();
 		const zone = /** @type {number} */ (settings.zone) || 0;
@@ -107,18 +94,5 @@ export class SourceAction extends PluginAction {
 			items: options
 		});
 
-	}
-}
-
-/**
- * Update the state of the action
- * @param {Action} action - The action object.
- * @param {AVRConnection} connection - The receiver connection object.
- * @param {number} [zone=0]
- */
-async function updateActionState(action, connection, zone = 0) {
-	const actionZone = parseInt("" + (await action.getSettings()).zone) || 0;
-	if (action.isKey() && actionZone === zone) {
-		// action.setState(connection.status.zones[zone].power ? 0 : 1);
 	}
 }

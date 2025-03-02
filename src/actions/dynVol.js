@@ -1,7 +1,7 @@
 import streamDeck, { action } from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").KeyDownEvent} KeyDownEvent */
 /** @typedef {import("@elgato/streamdeck").WillAppearEvent} WillAppearEvent */
-/** @typedef {import("@elgato/streamdeck").KeyAction} KeyAction */
+/** @typedef {import("@elgato/streamdeck").Action} Action */
 /** @typedef {import("@elgato/streamdeck").SendToPluginEvent} SendToPluginEvent */
 
 import { PluginAction } from "./action";
@@ -27,12 +27,9 @@ export class DynVolAction extends PluginAction {
 	async onWillAppear(ev) {
 		await super.onWillAppear(ev);
 
-		// If there's no connection yet, there's nothing to do
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
-		if (!connection) return;
-
 		// Set the initial state of the action based on the receiver's dynamic volume status
-		if (ev.action.isKey()) updateActionStatus(ev.action, connection);
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
+		updateActionStatus(ev.action, connection);
 	}
 
 	/**
@@ -61,10 +58,8 @@ export class DynVolAction extends PluginAction {
 	async onUserChoseReceiver(ev) {
 		await super.onUserChoseReceiver(ev);
 
-		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id].uuid];
-		if (!connection) return;
-
-		if (ev.action.isKey()) updateActionStatus(ev.action, connection);
+		const connection = this.avrConnections[this.actionReceiverMap[ev.action.id]?.uuid];
+		updateActionStatus(ev.action, connection);
 	}
 
 	/**
@@ -74,27 +69,22 @@ export class DynVolAction extends PluginAction {
 	onReceiverDynamicVolumeChanged(ev) {
 		if (!ev.actions) return;
 
-		Promise.all(
-			ev.actions.map(async (action) => {
-				// Filter any non-key actions
-				if (action.isKey() === false) return;
-
-				updateActionStatus(action, ev.connection);
-			})
-		);
+		Promise.all(ev.actions.map(async (action) => updateActionStatus(action, ev.connection)));
 	}
 }
 
 /**
  * Update the state of an action based on the receiver's dynamic volume status.
- * @param {KeyAction} action - The action object.
- * @param {AVRConnection} connection - The receiver connection object.
+ * @param {Action} action - The action object.
+ * @param {AVRConnection} [connection] - The receiver connection object.
  */
 async function updateActionStatus(action, connection) {
 	/** @type {DynamicVolume} */
-	const dynamicVolume = connection.status.zones[0].dynamicVolume;
+	const dynamicVolume = connection !== undefined ? connection.status.zones[0].dynamicVolume : undefined;
 
-	if (!dynamicVolume) {
+	if (action.isKey() === false) return;
+
+	if (dynamicVolume === undefined) {
 		action.setState(0); // Unknown state
 		return;
 	}
