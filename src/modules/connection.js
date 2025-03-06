@@ -46,39 +46,41 @@ import { TelnetSocket } from "telnet-stream";
  */
 
 const sources = {
-	"PHONO": "",
-	"CD": "",
-	"TUNER": "",
-	"DVD": "",
+	"PHONO": "Phono",
+	"CD": "CD",
+	"TUNER": "Tuner",
+	"DVD": "DVD",
 	"BD": "Blu-ray",
 	"TV": "TV Audio",
 	"SAT/CBL": "Cable / Satellite",
 	"MPLAY": "Media Player",
-	"GAME": "",
-	"HDRADIO": "",
+	"GAME": "Game",
+	"HDRADIO": "HD Radio",
 	"NET": "Online Music",
-	"PANDORA": "",
-	"SIRIUSXM": "",
-	"SPOTIFY": "",
-	"LASTFM": "",
-	"FLICKR": "",
-	"IRADIO": "",
-	"SERVER": "",
-	"FAVORITES": "",
-	"AUX": "",
-	"AUX1": "",
-	"AUX2": "",
-	"AUX3": "",
-	"AUX4": "",
-	"AUX5": "",
-	"AUX6": "",
-	"AUX7": "",
-	"BT": "",
-	"USB/IPOD": "",
-	"USB": "",
-	"IPD": "",
-	"IRP": "",
-	"FVP": ""
+	"PANDORA": "Pandora",
+	"SIRIUSXM": "SiriusXM",
+	"SPOTIFY": "Spotify",
+	"LASTFM": "Last.fm",
+	"FLICKR": "Flickr",
+	"IRADIO": "iRadio",
+	"SERVER": "Server",
+	"FAVORITES": "Favorites",
+	"AUX": "Aux",
+	"AUX1": "Aux 1",
+	"AUX2": "Aux 2",
+	"AUX3": "Aux 3",
+	"AUX4": "Aux 4",
+	"AUX5": "Aux 5",
+	"AUX6": "Aux 6",
+	"AUX7": "Aux 7",
+	"BT": "Bluetooth",
+	"USB/IPOD": "USB/iPod",
+	"USB": "USB",
+	"IPD": "iPod",
+	"IRP": "iRadio",
+	"FVP": "",
+	"ON": "Video Select: On",
+	"OFF": "Video Select: Off"
 };
 
 /**
@@ -349,6 +351,24 @@ export class AVRConnection {
 
 		telnet.write(command + "\r");
 		this.logger.debug(`Sent source command: ${command}`);
+
+		return true;
+	}
+
+	/**
+	 * Set the video select source of the given zone
+	 * @param {string} value - The source to set
+	 * @returns {boolean} Whether the command was sent successfully
+	 */
+	setVideoSelectSource(value) {
+		const telnet = this.#telnet;
+		if (!telnet || !value) return false;
+
+		let command = "SV";
+		command += value;
+
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent video select source command: ${command}`);
 
 		return true;
 	}

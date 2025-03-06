@@ -35,6 +35,9 @@ export class SourceAction extends PluginAction {
 			case "set":
 				connection.setSource(/** @type {string} */ (source), zone) || ev.action.showAlert();
 				break;
+			case "vs":
+				connection.setVideoSelectSource(/** @type {string} */ (source)) || ev.action.showAlert();
+				break;
 		}
 	}
 
