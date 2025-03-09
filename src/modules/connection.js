@@ -310,6 +310,11 @@ export class AVRConnection {
 		telnet.write(command + "\r");
 		this.logger.debug(`Sent mute command: ${command}`);
 
+		// Refresh the mute status to avoid synchronization issues
+		command = "?";
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent mute status request: ${command}`);
+
 		return true;
 	}
 
