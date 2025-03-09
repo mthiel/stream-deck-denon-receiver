@@ -581,6 +581,7 @@ export class AVRConnection {
 			}
 
 			status.volume = newVolume;
+			status.muted = false; // Implied by the volume changing
 			this.logger.debug(`Updated receiver volume for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.volume}`);
 
 			this.emit("volumeChanged", zone);
