@@ -310,6 +310,11 @@ export class AVRConnection {
 		telnet.write(command + "\r");
 		this.logger.debug(`Sent mute command: ${command}`);
 
+		// Refresh the mute status to avoid synchronization issues
+		command = "?";
+		telnet.write(command + "\r");
+		this.logger.debug(`Sent mute status request: ${command}`);
+
 		return true;
 	}
 
@@ -581,6 +586,7 @@ export class AVRConnection {
 			}
 
 			status.volume = newVolume;
+			status.muted = false; // Implied by the volume changing
 			this.logger.debug(`Updated receiver volume for ${this.#host} Z${zone === 0 ? "M" : "2"}: ${status.volume}`);
 
 			this.emit("volumeChanged", zone);

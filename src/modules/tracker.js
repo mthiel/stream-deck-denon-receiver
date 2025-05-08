@@ -8,10 +8,6 @@ import { DOMParser } from "@xmldom/xmldom";
 import streamDeck from "@elgato/streamdeck";
 /** @typedef {import("@elgato/streamdeck").Logger} Logger */
 
-// TODO: Add support for passively monitoring SSDP NOTIFY messages
-
-// TODO: Add handler for system wake
-
 /**
  * @typedef {Object} ReceiverInfo
  * @property {string} currentIP - The current IP address of the receiver
@@ -32,10 +28,6 @@ const SSDP_BROADCAST_LIMIT = 3; // Number of broadcasts to send before stopping
 
 /** @type {Logger} */
 let logger = streamDeck.logger;
-
-// Prep a udp socket for SSDP/UPnP discovery
-/** @type {Socket} */
-var udpSocket;
 
 const emitter = new EventEmitter();
 
@@ -61,12 +53,14 @@ let isScanning = true;
  * @returns {string}
  */
 function createSSDPMessage(mx = SSDP_SEARCH_MX) {
-	return 'M-SEARCH * HTTP/1.1\r\n' +
+	const message = 'M-SEARCH * HTTP/1.1\r\n' +
 		`HOST: ${SSDP_BROADCAST_ADDRESS}:${SSDP_BROADCAST_PORT}\r\n` +
 		'MAN: "ssdp:discover"\r\n' +
 		`MX: ${mx}\r\n` +
 		`ST: ${SSDP_SEARCH_TARGET}\r\n` +
 		'\r\n';
+	logger.debug(`Created SSDP message:\n${message}`);
+	return message;
 }
 
 /**
@@ -170,29 +164,23 @@ async function updateNameFromDescriptionURL(receiverID) {
 
 /**
  * Update the global settings cache with the new receiver details.
- * This is scheduled to delay a bit to prevent an active scan from making excessive changes to the settings.
  */
 function updatePersistentCache() {
-	if (cacheWriteTimer) {
-		// If there's already a timer running, clear it so we just delay longer instead of running multiple times.
-		clearTimeout(cacheWriteTimer);
-	}
-
-	// Set the timer to eventually update the global settings cache with the new receiver details.
-	cacheWriteTimer = setTimeout(() => {
-		streamDeck.settings.getGlobalSettings().then((settings) => {
-			settings.receiverList = receiverList;
-			streamDeck.settings.setGlobalSettings(settings)
-			.then(() => {
-				logger.debug("AVRTracker updated the global settings cache with the new receiver details.");
-			})
-			.catch((error) => {
-				logger.error(`AVRTracker failed to update the global settings cache: ${error}`);
-			});
+	streamDeck.settings.getGlobalSettings().then((settings) => {
+		settings.receiverList = receiverList;
+		streamDeck.settings.setGlobalSettings(settings)
+		.then(() => {
+			logger.debug("AVRTracker updated the global settings cache with the new receiver details.");
+		})
+		.catch((error) => {
+			logger.error(`AVRTracker failed to update the global settings cache: ${error}`);
 		});
-	}, 10000); // 10 second delay
+	});
 }
 
+/**
+ * Initialize the receiver list from the global settings cache
+ */
 async function readFromPersistentCache() {
 	const settings = (await streamDeck.settings.getGlobalSettings());
 
@@ -202,85 +190,110 @@ async function readFromPersistentCache() {
 }
 
 /**
+ * Create a UDP socket for a specific network interface
+ * @param {string} interfaceAddress - The IP address of the interface to bind to
+ * @returns {Promise<Socket>}
+ */
+async function createInterfaceSocket(interfaceAddress) {
+	const socket = dgram.createSocket({ 
+		type: "udp4",
+		reuseAddr: true,
+		ipv6Only: false
+	})
+	.on("listening", () => { 
+		try {
+			socket.setBroadcast(true);
+			socket.setMulticastTTL(4);
+			socket.addMembership(SSDP_BROADCAST_ADDRESS, interfaceAddress);
+			logger.debug(`Created socket for interface ${interfaceAddress}`);
+		} catch (err) {
+			logger.error(`Error configuring socket for interface ${interfaceAddress}: ${err.message}`);
+			throw err;
+		}
+	})
+	.on("message", (message, rinfo) => { 
+		logger.debug(`Received message from ${rinfo.address}:${rinfo.port} on interface ${interfaceAddress}`);
+		onResponse(message, rinfo);
+	})
+	.on("error", (error) => { 
+		logger.error(`Socket error on interface ${interfaceAddress}: ${error}`);
+	});
+
+	await new Promise((resolve, reject) => {
+		socket.bind({
+			port: 0,
+			address: interfaceAddress,
+			exclusive: true
+		}, (err) => {
+			if (err) reject(err);
+			else resolve(undefined);
+		});
+	});
+
+	return socket;
+}
+
+/**
+ * Create and return UDP sockets for all available network interfaces
+ * @returns {Promise<Socket[]>}
+ */
+async function createScannerSockets() {
+	const interfaces = os.networkInterfaces();
+	const sockets = [];
+
+	logger.debug("Available network interfaces:");
+	Object.entries(interfaces).forEach(([name, iface]) => {
+		if (!iface) return;
+		logger.debug(`Interface ${name}:`);
+		iface.forEach((address) => {
+			logger.debug(`  - ${address.family} ${address.address} (internal: ${address.internal})`);
+		});
+	});
+
+	// Create a socket for each IPv4 interface that isn't internal
+	for (const iface of Object.values(interfaces)) {
+		if (!iface) continue;
+
+		for (const address of iface) {
+			if (address.family === 'IPv4' && !address.internal) {
+				try {
+					const socket = await createInterfaceSocket(address.address);
+					sockets.push(socket);
+				} catch (err) {
+					logger.error(`Failed to create socket for interface ${address.address}: ${err.message}`);
+				}
+			}
+		}
+	}
+
+	if (sockets.length === 0) {
+		throw new Error("Failed to create any network sockets");
+	}
+
+	logger.debug(`Created ${sockets.length} sockets for network interfaces`);
+	return sockets;
+}
+
+/**
  * Utility module for tracking HEOS-enabled AVR receivers on the network via SSDP/UPnP protocol
  */
 export const AVRTracker = {
+	init: async () => {
+		// await readFromPersistentCache();
+
+		// We've retrieved the receiver list from the cache, so we can clear the initial "scanning" state
+		isScanning = false;
+	
+		// Notify in case any actions were waiting for initialization to complete
+		emitter.emit("scanned");
+	},
+
 	/**
 	 * Set the logger instance to use
 	 * @param {Logger} newLogger - The new logger instance
 	 */
 	setLogger(newLogger) {
 		logger = newLogger.createScope("AVRTracker");
-	},
-
-	/**
-	 * Initialize the tracker
-	 * @returns {Promise<void>}
-	 */
-	listen: async () => {
-		logger.debug("AVRTracker listener initializing...");
-
-		// First bind to all interfaces, then configure multicast
-		udpSocket = dgram.createSocket({ 
-			type: "udp4",
-			reuseAddr: true,
-			ipv6Only: false
-		})
-		.on("listening", () => { 
-			try {
-				// Essential Windows multicast setup
-				udpSocket.setBroadcast(true);
-				udpSocket.setMulticastTTL(4); // Reduced TTL, some Windows systems have issues with higher values
-				udpSocket.setMulticastLoopback(true);
-
-				// Get all network interfaces
-				const interfaces = os.networkInterfaces();
-				Object.values(interfaces).forEach((iface) => {
-					if (!iface) return;
-
-					iface.forEach((address) => {
-						// Only handle IPv4 interfaces that aren't internal
-						if (address.family === 'IPv4' && !address.internal) {
-							try {
-								// First try to add membership with specific interface
-								udpSocket.addMembership(SSDP_BROADCAST_ADDRESS, address.address);
-								logger.debug(`Added multicast membership for interface ${address.address}`);
-
-								// On Windows, explicitly set the multicast interface
-								udpSocket.setMulticastInterface(address.address);
-								logger.debug(`Set multicast interface to ${address.address}`);
-							} catch (err) {
-								logger.debug(`Failed to configure interface ${address.address}: ${err.message}`);
-							}
-						}
-					});
-				});
-
-				logger.debug(`AVRTracker udp socket listening on ${udpSocket.address().address}:${udpSocket.address().port}`);
-			} catch (err) {
-				logger.error(`Error configuring multicast: ${err.message}`);
-			}
-		})
-		.on("message", (message, rinfo) => { onResponse(message, rinfo) })
-		.on("error", (error) => { logger.error(`AVRTracker error: ${error}`) });
-
-		// Bind to all interfaces
-		await new Promise((resolve) => {
-			udpSocket.bind({
-				port: 0,
-				address: '0.0.0.0',
-				exclusive: false
-			}, () => {
-				resolve(undefined);
-			});
-		});
-
-		// Read the receiver list from the global settings cache
-		await readFromPersistentCache();
-
-		// We've retrieved the receiver list from the cache, so we're no longer "scanning"
-		isScanning = false;
-		emitter.emit("scanned");
 	},
 
 	/**
@@ -296,6 +309,8 @@ export const AVRTracker = {
 			return receiverList;
 		}
 
+		const sockets = await createScannerSockets();
+
 		logger.info("AVRTracker broadcasting SSDP search for HEOS receivers on the network...");
 		isScanning = true;
 		const startTime = Date.now();
@@ -307,37 +322,34 @@ export const AVRTracker = {
 
 		AVRTracker.on("updated", onUpdate);
 
-		// Get all network interfaces
-		const interfaces = os.networkInterfaces();
 		const message = createSSDPMessage(maxWait);
 
 		// The broadcast and wait loop
 		for (let i = 1; i <= count; i++) {
-			// Send on each interface
-			Object.values(interfaces).forEach((iface) => {
-				if (!iface) return;
-
-				iface.forEach((address) => {
-					if (address.family === 'IPv4' && !address.internal) {
-						try {
-							udpSocket.setMulticastInterface(address.address);
-							udpSocket.send(message, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS);
-							logger.debug(`Sent request ${i} on interface ${address.address}`);
-						} catch (err) {
-							logger.debug(`Failed to send on interface ${address.address}: ${err.message}`);
+			// Send on each socket
+			for (const socket of sockets) {
+				try {
+					socket.send(message, SSDP_BROADCAST_PORT, SSDP_BROADCAST_ADDRESS, (err) => {
+						if (err) {
+							logger.error(`Failed to send SSDP message on socket ${socket.address().address}: ${err.message}`);
+						} else {
+							logger.debug(`Successfully sent SSDP message on interface ${socket.address().address}`);
 						}
-					}
-				});
-			});
+					});
+				} catch (err) {
+					logger.error(`Error sending on socket ${socket.address().address}: ${err.message}`);
+				}
+			}
 
 			logger.info(`AVRTracker sent request ${i} of ${count}. Waiting for replies...`);
 			await new Promise((resolve) => setTimeout(resolve, maxWait * 1000));
 		}
 
+		// Close all sockets
+		sockets.forEach(socket => socket.close());
+
 		AVRTracker.off("updated", onUpdate);
-
 		isScanning = false;
-
 		emitter.emit("scanned");
 
 		return receiverList;

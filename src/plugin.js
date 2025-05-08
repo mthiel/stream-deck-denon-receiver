@@ -39,8 +39,8 @@ streamDeck.actions.registerAction(new DynVolAction(plugin));
 // Connect to the StreamDeck and kick-off the rest of the initialization
 await streamDeck.connect();
 
-// Start the SSDP/UPnP tracker and perform a scan if no receivers are found in the cache
-await AVRTracker.listen();
+// Start the SSDP/UPnP scanner and perform a scan if no receivers are found in the cache
+await AVRTracker.init();
 if (Object.keys(AVRTracker.getReceivers()).length === 0) {
     // Perform a quick initial scan, followed by a longer scan on startup so that existing actions can connect
     // Between the two scans, that should cover fast (wired) connections as well as slower (wireless) connections
