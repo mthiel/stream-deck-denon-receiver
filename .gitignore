@@ -1,6 +1,9 @@
 # Node.js
 node_modules/
 
+# Local library for debugging
+sdpi-components.js
+
 # Stream Deck files
 *.sdPlugin/bin
 *.sdPlugin/logs
